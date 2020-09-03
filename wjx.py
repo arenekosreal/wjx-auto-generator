@@ -9,8 +9,6 @@ import threading
 import shutil
 import zipfile
 import hashlib
-import ctypes
-import winreg
 import subprocess
 os.chdir(os.path.split(os.path.realpath(__file__))[0])
 def gen_bootstrap():

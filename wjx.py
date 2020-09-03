@@ -1,31 +1,88 @@
-from selenium import webdriver
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions
+import os 
+import sys
+if os.name!="nt":
+    raise RuntimeError("此脚本仅支持Windows XP SP2及更高版本")
 from multiprocessing import cpu_count
 import time
 import random
 import threading
-import os 
 import shutil
-import requests
-import py7zr
+import zipfile
+import hashlib
+import ctypes
+import winreg
+import subprocess
+os.chdir(os.path.split(os.path.realpath(__file__))[0])
+def gen_bootstrap():
+    lines=[
+        "@echo off\n",
+        "%1 mshta vbscript:CreateObject(\"Shell.Application\").ShellExecute(\"cmd.exe\",\"/c %~s0 ::\",\"\",\"runas\",1)(window.close)&&exit\n",
+        "cd /d \"%~dp0\"\n",
+        "(echo selenium==3.141.0\necho requests==2.23.0) > requirements.txt\n",
+        "\""+sys.executable+"\" -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple\n",
+        "reg ADD HKLM\SOFTWARE\Policies\Google\Chrome /v RendererCodeIntegrityEnabled /t REG_DWORD /d 0 /f\n",
+        "del /F /S /Q requirements.txt\n"]
+    with open("bootstrap.bat","w",encoding="utf-8") as gen:
+        gen.writelines(lines)
+try:
+    import requests
+    from selenium import webdriver
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support import expected_conditions
+except:
+    print("正在初始化依赖环境。。。")
+    gen_bootstrap()
+    subprocess.run("bootstrap.bat")
+    os.remove("bootstrap.bat")
+    print("初始化依赖环境完成")
+else:
+    print("依赖环境正常")
 if os.path.exists("Chrome")==False:
     os.mkdir("Chrome")
 if os.path.exists("Chrome/App/chrome.exe")==False:
     print("正在初始化运行环境。。。")
-    with open("env.rar","wb") as file_downloader:
-        file_downloader.write(requests.get().read)
-        
+    envaddr_list=["https://github.wuyanzheshui.workers.dev","https://download.fastgit.org"]
+    def unpack(md5_:str):
+        with open("Chrome/env.zip","rb") as file_reader:
+            md5=hashlib.md5(file_reader.read()).hexdigest()
+        if md5==md5_:
+            with zipfile.ZipFile("Chrome/env.zip","r",compression=zipfile.ZIP_DEFLATED) as archive:
+                archive.extractall("Chrome")
+            os.remove("Chrome/env.zip")
+            return 0
+        else:
+            print("文件MD5不符，终止解压缩")
+            return 1
+    def down_env(addr_head:str):
+        if os.path.exists("Chrome/env.zip")==False:
+            envaddr=addr_head+"/zhanghua000/wjx-auto-generator-env/releases/download/1.0/env.zip"
+            with open("Chrome/env.zip","wb") as file_downloader:
+                file_downloader.write(requests.get(envaddr).content)
+        if unpack("dcf2981ec68a72e206f949066ee8eedd")==1:
+            print("下载失败，请手动下载 "+envaddr+" 并以 env.zip 的文件名保存到Chrome目录下，之后重启程序")
+            return 1
+        else:
+            return 0
+    def check_stat(list_:list):
+        result=[]
+        for addr in list_:
+            resp=requests.get(addr)
+            if resp.status_code==200:
+                result.append(addr)
+        return result
+    choosen_head=random.sample(check_stat(envaddr_list),1)[0]
+    if down_env(choosen_head)==1:
+        raise RuntimeError("下载运行环境出错，请检查网络连接后重试")
+if os.path.exists("log"):
+    shutil.rmtree("log")
+os.mkdir("log")
 times=int(input("请输入生成的问卷的份数："))
 print("问卷星地址举例：https://www.wjx.cn/jq/89714348.aspx")
 url=str(input("请输入问卷星创建的问卷地址："))
 main_log=open("log/main.log","w",encoding="utf-8")
 url="https://www.wjx.cn/jq/"+url.split("/")[-1]
 print("转换地址完成，为："+url,file=main_log)
-if os.path.exists("log"):
-    shutil.rmtree("log")
-os.mkdir("log")
 start_time=time.time()
 def do_survey(url,log):
     browser=webdriver.ChromeOptions()

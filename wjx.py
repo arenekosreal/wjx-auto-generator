@@ -12,7 +12,7 @@ import hashlib
 import subprocess
 import string
 import logging
-debug=True
+debug=False
 if debug==True:
     log_level=logging.DEBUG
 else:

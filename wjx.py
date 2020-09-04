@@ -13,6 +13,7 @@ import subprocess
 import string
 import logging
 debug=False
+warn_num=350
 if debug==True:
     log_level=logging.DEBUG
 else:
@@ -36,16 +37,16 @@ try:
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support import expected_conditions
 except:
-    print("正在初始化依赖环境。。。")
+    logging.info("正在初始化依赖环境。。。")
     gen_bootstrap()
     re=subprocess.run("bootstrap.bat")
     if re.returncode==0:
         os.remove("bootstrap.bat")
-        print("初始化依赖环境完成")
+        logging.info("初始化依赖环境完成")
     else:
         raise RuntimeError("初始化依赖环境失败，请手动执行 bootstrap.bat 完成初始化。弹出的UAC认证提示请予以通过")
 else:
-    print("依赖环境正常")
+    logging.info("依赖环境正常")
     if os.path.exists("bootstrap.bat")==True:
         os.remove("bootstrap.bat")
     if os.path.exists("Chrome/env.zip")==True:
@@ -53,7 +54,7 @@ else:
 if os.path.exists("Chrome")==False:
     os.mkdir("Chrome")
 if os.path.exists("Chrome/App/chrome.exe")==False:
-    print("正在初始化运行环境。。。")
+    logging.info("正在初始化运行环境。。。")
     envaddr_list=["https://github.wuyanzheshui.workers.dev","https://download.fastgit.org"]
     def unpack(md5_:str):
         with open("Chrome/env.zip","rb") as file_reader:
@@ -64,7 +65,7 @@ if os.path.exists("Chrome/App/chrome.exe")==False:
             os.remove("Chrome/env.zip")
             return 0
         else:
-            print("文件MD5不符，终止解压缩")
+            logging.error("文件MD5不符，终止解压缩")
             return 1
     def down_env(addr_head:str):
         if os.path.exists("Chrome/env.zip")==False:
@@ -72,7 +73,7 @@ if os.path.exists("Chrome/App/chrome.exe")==False:
             with open("Chrome/env.zip","wb") as file_downloader:
                 file_downloader.write(requests.get(envaddr).content)
         if unpack("dcf2981ec68a72e206f949066ee8eedd")==1:
-            print("下载失败，请手动下载 "+envaddr+" 并以 env.zip 的文件名保存到Chrome目录下，之后重启程序")
+            logging.warning("下载失败，请手动下载 "+envaddr+" 并以 env.zip 的文件名保存到Chrome目录下，之后重启程序")
             return 1
         else:
             return 0
@@ -97,6 +98,8 @@ console.setLevel(log_level)
 console.setFormatter(formatter)
 logger.addHandler(console)
 times=int(input("请输入生成的问卷的份数："))
+if times>=warn_num:
+    logging.warning("当前问卷份数较多，大于 %s 次，较易触发unknown error错误。如果触发，请重新执行脚本。" %warn_num)
 print("问卷星地址举例：https://www.wjx.cn/jq/89714348.aspx")
 url=str(input("请输入问卷星创建的问卷地址："))
 url="https://www.wjx.cn/jq/"+url.split("/")[-1]

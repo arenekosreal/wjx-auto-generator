@@ -39,6 +39,10 @@ except:
         raise RuntimeError("初始化依赖环境失败，请手动执行 bootstrap.bat 完成初始化。弹出的UAC认证提示请予以通过")
 else:
     print("依赖环境正常")
+    if os.path.exists("bootstrap.bat")==True:
+        os.remove("bootstrap.bat")
+    if os.path.exists("Chrome/env.zip")==True:
+        os.remove("Chrome/env.zip")
 if os.path.exists("Chrome")==False:
     os.mkdir("Chrome")
 if os.path.exists("Chrome/App/chrome.exe")==False:

@@ -31,9 +31,12 @@ try:
 except:
     print("正在初始化依赖环境。。。")
     gen_bootstrap()
-    subprocess.run("bootstrap.bat")
-    os.remove("bootstrap.bat")
-    print("初始化依赖环境完成")
+    re=subprocess.run("bootstrap.bat")
+    if re.returncode==0:
+        os.remove("bootstrap.bat")
+        print("初始化依赖环境完成")
+    else:
+        raise RuntimeError("初始化依赖环境失败，请手动执行 bootstrap.bat 完成初始化。弹出的UAC认证提示请予以通过")
 else:
     print("依赖环境正常")
 if os.path.exists("Chrome")==False:

@@ -10,6 +10,13 @@ import shutil
 import zipfile
 import hashlib
 import subprocess
+import string
+import logging
+debug=True
+if debug==True:
+    log_level=logging.DEBUG
+else:
+    log_level=logging.INFO
 os.chdir(os.path.split(os.path.realpath(__file__))[0])
 def gen_bootstrap():
     lines=[
@@ -82,17 +89,24 @@ if os.path.exists("Chrome/App/chrome.exe")==False:
 if os.path.exists("log"):
     shutil.rmtree("log")
 os.mkdir("log")
+logging.basicConfig(filename="log/main.log",filemode="w",format="%(asctime)s - %(levelname)s - %(message)s",datefmt="%Y-%m-%d %H:%M:%S",level=log_level)
+logger=logging.getLogger()
+formatter=logging.Formatter(fmt="%(asctime)s - %(levelname)s - %(message)s",datefmt="%Y-%m-%d %H:%M:%S")
+console=logging.StreamHandler()
+console.setLevel(log_level)
+console.setFormatter(formatter)
+logger.addHandler(console)
 times=int(input("请输入生成的问卷的份数："))
 print("问卷星地址举例：https://www.wjx.cn/jq/89714348.aspx")
 url=str(input("请输入问卷星创建的问卷地址："))
-main_log=open("log/main.log","w",encoding="utf-8")
 url="https://www.wjx.cn/jq/"+url.split("/")[-1]
-print("转换地址完成，为："+url,file=main_log)
+logging.info("转换地址完成，为："+url)
 start_time=time.time()
 def do_survey(url,log):
     browser=webdriver.ChromeOptions()
     browser.binary_location="./Chrome/App/chrome.exe"
-    browser.add_argument("headless")
+    if debug==False:
+        browser.add_argument("headless")
     driver = webdriver.Chrome("./Chrome/app/chromedriver.exe",options=browser)
     driver.get(url)
     wait = WebDriverWait(driver, 10)
@@ -100,6 +114,8 @@ def do_survey(url,log):
     def do_queue(driver_=driver):
         root_element=driver_.find_element_by_xpath("/html/body/div[2]/div[1]/div[2]/div[1]/div[1]/div[1]/div[2]/div[2]/fieldset")
         question_elements=root_element.find_elements_by_class_name("div_question")
+        def gen_str(num:int):
+            return ''.join(random.sample(string.ascii_letters + string.digits, num))
         for element in question_elements:
             element_pos=question_elements.index(element)
             question_title=element.find_element_by_xpath("./div[1]/div[2]").text
@@ -121,13 +137,23 @@ def do_survey(url,log):
                 for answer in choose_answers:
                     choose_answer_title=choose_answer_title+answer.find_element_by_tag_name("label").text+"\n"
                     answer.find_element_by_tag_name("a").click()
+                    if len(answer.find_elements_by_tag_name("input"))==2:
+                        text_input=answer.find_elements_by_tag_name("input")[1]
+                        text_input.click()
+                        text_input.clear()
+                        text_input.send_keys(gen_str(random.randint(5,10)))
                     time.sleep(random.randint(1,3))
+            elif question_answers[0].find_element_by_xpath("./input").get_attribute("type")=="text":
+                target=question_answers[0]
+                target.click()
+                target.clear()
+                target.send_keys(gen_str(random.randint(10,20)))
             else:
                 raise RuntimeError("无法获取正确的元素，请重试！")
             print("问题："+question_title+"\n选择："+choose_answer_title+"\n",file=log)
     do_queue(driver_=driver)
     driver.find_element_by_xpath("/html/body/div[2]/div[1]/div[2]/div[1]/div[1]/div[1]/div[2]/div[4]/table/tbody/tr/td/input").click()
-    print("已提交记录",file=main_log)
+    logging.info("已提交记录")
     driver.quit()
 class job_thread(threading.Thread):
     def __init__(self,id_:int,times:int,url:str):
@@ -155,5 +181,4 @@ for thread in threads:
     thread.join()
 m,s=divmod(int(time.time()-start_time),60)
 h,m=divmod(m,60)
-print("执行完成，选择内容可查看日志文件输出记录,用时 %02d:%02d:%02d \n部分问卷可能由于网站防护机制未能提交，请手动登陆网页后台查看。" %(h, m, s),file=main_log)
-main_log.close()
+logging.info("执行完成，选择内容可查看日志文件输出记录,用时 %02d:%02d:%02d 部分问卷可能由于网站防护机制未能提交，请手动登陆网页后台查看。" %(h, m, s))

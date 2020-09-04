@@ -102,7 +102,7 @@ url=str(input("请输入问卷星创建的问卷地址："))
 url="https://www.wjx.cn/jq/"+url.split("/")[-1]
 logging.info("转换地址完成，为："+url)
 start_time=time.time()
-def do_survey(url,log):
+def do_survey(url:str,logger:logging.Logger):
     browser=webdriver.ChromeOptions()
     browser.binary_location="./Chrome/App/chrome.exe"
     if debug==False:
@@ -135,38 +135,44 @@ def do_survey(url,log):
                     choose_answers.append(target)
                     choose_answers_pos.append(question_answers.index(target))
                 for answer in choose_answers:
-                    choose_answer_title=choose_answer_title+answer.find_element_by_tag_name("label").text+"\n"
+                    text=""
                     answer.find_element_by_tag_name("a").click()
                     if len(answer.find_elements_by_tag_name("input"))==2:
                         text_input=answer.find_elements_by_tag_name("input")[1]
                         text_input.click()
                         text_input.clear()
-                        text_input.send_keys(gen_str(random.randint(5,10)))
+                        text=gen_str(random.randint(5,10))
+                        text_input.send_keys(text)
+                        choose_answer_title=choose_answer_title
+                    choose_answer_title=choose_answer_title+answer.find_element_by_tag_name("label").text+text+"\n"
                     time.sleep(random.randint(1,3))
             elif question_answers[0].find_element_by_xpath("./input").get_attribute("type")=="text":
                 target=question_answers[0]
                 target.click()
                 target.clear()
-                target.send_keys(gen_str(random.randint(10,20)))
+                text=gen_str(random.randint(10,20))
+                target.send_keys(text)
+                choose_answer_title=text+"\n"
             else:
                 raise RuntimeError("无法获取正确的元素，请重试！")
-            print("问题："+question_title+"\n选择："+choose_answer_title+"\n",file=log)
+            logger.info("问题："+question_title+"\n选择："+choose_answer_title+"\n")
     do_queue(driver_=driver)
     driver.find_element_by_xpath("/html/body/div[2]/div[1]/div[2]/div[1]/div[1]/div[1]/div[2]/div[4]/table/tbody/tr/td/input").click()
-    logging.info("已提交记录")
+    logger.info("已提交记录")
     driver.quit()
 class job_thread(threading.Thread):
     def __init__(self,id_:int,times:int,url:str):
         self.id=id_
         self.times=times
         self.url=url
-        self.log=open("log/"+str(self.id)+".log","w",encoding="utf-8")
+        self.thread_logger=logging.Logger("thread_logger")
+        thread_log_handler=logging.FileHandler(filename="log/"+str(self.id)+".log",mode="w",encoding="utf-8")
+        self.thread_logger.addHandler(thread_log_handler)
         threading.Thread.__init__(self)
     def run(self):
-        print("线程 "+str(self.id)+" 开始执行",file=self.log)
+        self.thread_logger.info("线程 "+str(self.id)+" 开始执行")
         for each_time in range(self.times):
-            do_survey(self.url,self.log)
-        self.log.close()
+            do_survey(self.url,self.thread_logger)
 threads=[]
 thread_num=int(cpu_count()/2)
 full_times,more_time=divmod(times,thread_num)

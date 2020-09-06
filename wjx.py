@@ -205,25 +205,30 @@ class job_thread(threading.Thread):
                 for each_time in range(self.times):
                     finish_survey(url_=self.url,each_time_=each_time)
             else:
-                self.thread_logger.info("执行次数较多，将分成每 %d 次一组，每组间隔一定时间完成以避免验证" %max_conn)
                 times_,more_times_=divmod(self.times,max_conn)
+                self.thread_logger.info("执行次数较多，将分成每 %d 次一组，每组间隔一定时间，共 %d 组完成以避免验证" %(max_conn,times_))
                 if more_times_!=0:
                     for time_ in range(more_times_):
                         finish_survey(url_=self.url,each_time_=time_)
-                    self.thread_logger.info("线程 %s 第 %d 次执行完成" %(self.id,time_))
+                        self.thread_logger.info("线程 %s 第 %d 组第 %d 次执行完成" %(self.id,times_,time_))
                     time.sleep(random.randint(3,5))
                 for time_ in range(times_):
                     for each_conn in range(max_conn):
                         finish_survey(url_=self.url,each_time_=each_conn)
-                    self.thread_logger.info("线程 %s 第 %d 次执行完成" %(self.id,each_conn))
+                        self.thread_logger.info("线程 %s 第 %d 组第 %d 次执行完成" %(self.id,time_,each_conn))
                     time.sleep(random.randint(3,5))
             time.sleep(random.randint(5,7))
-
+        if self.failed_num!=0:
+            self.times=self.failed_num
+            pause_time=random.randint(30,60)
+            logger.warning("失败次数为 %d 等待 %02d 秒后继续处理" %(self.failed_num,pause_time))
+            self.thread_logger.warning("暂停 %02d 秒以尝试避免触发验证" %pause_time)
+            time.sleep(pause_time)
+            self.run()
         logger.info("线程 %d 结束运行" %self.id)
 threads=[]
 thread_num=int(cpu_count()/2)
 full_times,more_time=divmod(times,thread_num)
-all_faileds=0
 for cpu in range(thread_num):
     working_thread=job_thread(cpu,full_times,url)
     threads.append(working_thread)
@@ -233,7 +238,7 @@ threads.append(more_thread)
 more_thread.start()
 for thread in threads:
     thread.join()
-    all_faileds=all_faileds+thread.failed_num
+    logger.info("线程 %d 初始化完成" %thread.id)
 m,s=divmod(int(time.time()-start_time),60)
 h,m=divmod(m,60)
-logger.info("执行完成，选择内容可查看日志文件输出记录，用时 %02d:%02d:%02d 其中 %d 份问卷由于网站防护机制未能提交。" %(h, m, s, all_faileds))
+logger.info("执行完成，选择内容可查看日志文件输出记录，用时 %02d:%02d:%02d 共提交 %d 份问卷。" %(h, m, s, times))

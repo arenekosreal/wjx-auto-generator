@@ -104,7 +104,7 @@ if times>=warn_num:
     logger.warning("当前问卷份数较多，大于 %s 次，较易触发unknown error错误。如果触发，请重新执行脚本。" %warn_num)
 print("问卷星地址举例：https://www.wjx.cn/jq/89714348.aspx")
 url=str(input("请输入问卷星创建的问卷地址："))
-url="https://www.wjx.cn/jq/"+url.split("/")[-1]
+url="https://www.wjx.cn/jq/"+url.split("/")[-1].replace(" ","")
 logger.info("转换地址完成，为："+url)
 start_time=time.time()
 def do_survey(url_2:str,logger_:logging.Logger):
@@ -144,14 +144,16 @@ def do_survey(url_2:str,logger_:logging.Logger):
                 for answer in choose_answers:
                     text=""
                     answer.find_element_by_tag_name("a").click()
+                    choose_answer_title=answer.find_element_by_tag_name("label").text
                     if len(answer.find_elements_by_tag_name("input"))==2:
                         text_input=answer.find_elements_by_tag_name("input")[1]
                         text_input.click()
                         text_input.clear()
                         text=gen_str(random.randint(5,10))
                         text_input.send_keys(text)
-                        choose_answer_title=choose_answer_title
-                    choose_answer_title=choose_answer_title+answer.find_element_by_tag_name("label").text+text+"\n"
+                        choose_answer_title=choose_answer_title+text+"\n"
+                    else:
+                        choose_answer_title=choose_answer_title+"\n"
                     time.sleep(random.randint(1,3))
             elif question_answers[0].find_element_by_xpath("./input").get_attribute("type")=="text":
                 target=question_answers[0]
@@ -164,7 +166,7 @@ def do_survey(url_2:str,logger_:logging.Logger):
                 raise RuntimeError("无法获取正确的元素，请重试！")
             logger_.info("问题："+question_title+"\n选择："+choose_answer_title+"\n")
     do_queue(driver_=driver)
-    time.sleep(random.randint(1,5))
+    time.sleep(random.randint(1,3))
     driver.find_element_by_xpath("/html/body/div[2]/div[1]/div[2]/div[1]/div[1]/div[1]/div[2]/div[4]/table/tbody/tr/td/input").click()
     try:
         target=driver.find_element_by_xpath("/html/body/div[2]/div[1]/div[2]/div[1]/div[1]/div[1]/div[2]/div[4]/div[1]/div[1]/div[1]/div[1]/div[1]")
@@ -204,6 +206,7 @@ class job_thread(threading.Thread):
             if self.times>0 and self.times<=max_conn:
                 for each_time in range(self.times):
                     finish_survey(url_=self.url,each_time_=each_time)
+                    time.sleep(random.randint(1,3))
             else:
                 times_,more_times_=divmod(self.times,max_conn)
                 self.thread_logger.info("执行次数较多，将分成每 %d 次一组，每组间隔一定时间，共 %d 组完成以避免验证" %(max_conn,times_))
@@ -211,16 +214,18 @@ class job_thread(threading.Thread):
                     for time_ in range(more_times_):
                         finish_survey(url_=self.url,each_time_=time_)
                         self.thread_logger.info("线程 %s 第 %d 组第 %d 次执行完成" %(self.id,times_,time_))
+                        time.sleep(random.randint(1,3))
                     time.sleep(random.randint(3,5))
                 for time_ in range(times_):
                     for each_conn in range(max_conn):
                         finish_survey(url_=self.url,each_time_=each_conn)
                         self.thread_logger.info("线程 %s 第 %d 组第 %d 次执行完成" %(self.id,time_,each_conn))
+                        time.sleep(random.randint(1,3))
                     time.sleep(random.randint(3,5))
             time.sleep(random.randint(5,7))
         if self.failed_num!=0:
             self.times=self.failed_num
-            pause_time=random.randint(30,60)
+            pause_time=random.randint(10,60)
             logger.warning("失败次数为 %d 等待 %02d 秒后继续处理" %(self.failed_num,pause_time))
             self.thread_logger.warning("暂停 %02d 秒以尝试避免触发验证" %pause_time)
             time.sleep(pause_time)

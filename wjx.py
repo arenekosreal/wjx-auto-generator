@@ -80,11 +80,12 @@ if os.path.exists("Chrome/App/chrome.exe")==False:
             logger.error("文件MD5不符，终止解压缩")
             return 1
     def down_env(addr_head:str):
+        zip_md5="dcf2981ec68a72e206f949066ee8eedd"
         if os.path.exists("Chrome/env.zip")==False:
             envaddr=addr_head+"/zhanghua000/wjx-auto-generator-env/releases/download/1.0/env.zip"
             with open("Chrome/env.zip","wb") as file_downloader:
                 file_downloader.write(requests.get(envaddr).content)
-        if unpack("dcf2981ec68a72e206f949066ee8eedd")==1:
+        if unpack(zip_md5)==1:
             logger.warning("下载失败，请手动下载 "+envaddr+" 并以 env.zip 的文件名保存到Chrome目录下，之后重启程序")
             return 1
         else:
@@ -196,38 +197,37 @@ class job_thread(threading.Thread):
         self.failed_num=0
         self.thread_logger.info("线程 "+str(self.id)+" 开始执行")
         max_conn=3
-        for each_time in range(self.times):
-            def finish_survey(url_:str,each_time_:int,logger_2=self.thread_logger):
-                if do_survey(url_2=url_,logger_=logger_2)==False:
-                    self.failed_num=self.failed_num+1
-                    logger_2.warning("线程 %s 在第 %d 次执行触发验证，提交失败" %(self.id,each_time_))
-                else:
-                    logger_2.info("线程 %d 在第 %d 次执行成功提交数据" %(self.id,each_time_))
-            if self.times>0 and self.times<=max_conn:
-                for each_time in range(self.times):
-                    finish_survey(url_=self.url,each_time_=each_time)
-                    time.sleep(random.randint(1,3))
+        def finish_survey(url_:str,each_time_:int,logger_2=self.thread_logger):
+            if do_survey(url_2=url_,logger_=logger_2)==False:
+                self.failed_num=self.failed_num+1
+                logger_2.warning("线程 %d 在第 %d 次执行触发验证，提交失败" %(self.id,each_time_))
             else:
-                times_,more_times_=divmod(self.times,max_conn)
-                self.thread_logger.info("执行次数较多，将分成每 %d 次一组，每组间隔一定时间，共 %d 组完成以避免验证" %(max_conn,times_))
-                if more_times_!=0:
-                    for time_ in range(more_times_):
-                        finish_survey(url_=self.url,each_time_=time_)
-                        self.thread_logger.info("线程 %s 第 %d 组第 %d 次执行完成" %(self.id,times_,time_))
-                        time.sleep(random.randint(1,3))
-                    time.sleep(random.randint(3,5))
-                for time_ in range(times_):
-                    for each_conn in range(max_conn):
-                        finish_survey(url_=self.url,each_time_=each_conn)
-                        self.thread_logger.info("线程 %s 第 %d 组第 %d 次执行完成" %(self.id,time_,each_conn))
-                        time.sleep(random.randint(1,3))
-                    time.sleep(random.randint(3,5))
-            time.sleep(random.randint(5,7))
+                logger_2.info("线程 %d 在第 %d 次执行成功提交数据" %(self.id,each_time_))
+        if self.times>0 and self.times<=max_conn:
+            for each_time in range(self.times):
+                finish_survey(url_=self.url,each_time_=each_time)
+                time.sleep(random.randint(1,3))
+        else:
+            times_,more_times_=divmod(self.times,max_conn)
+            self.thread_logger.info("执行次数较多，将分成每 %d 次一组，每组间隔一定时间，共 %d 组完成以避免验证" %(max_conn,times_))
+            if more_times_!=0:
+                for time_ in range(more_times_):
+                    finish_survey(url_=self.url,each_time_=time_)
+                    self.thread_logger.info("线程 %d 第 %d 组第 %d 次执行完成" %(self.id,times_,time_))
+                    time.sleep(random.randint(1,3))
+                time.sleep(random.randint(3,5))
+            for time_ in range(times_):
+                for each_conn in range(max_conn):
+                    finish_survey(url_=self.url,each_time_=each_conn)
+                    self.thread_logger.info("线程 %d 第 %d 组第 %d 次执行完成" %(self.id,time_,each_conn))
+                    time.sleep(random.randint(1,3))
+                time.sleep(random.randint(3,5))
+        time.sleep(random.randint(5,7))
         if self.failed_num!=0:
             self.times=self.failed_num
             pause_time=random.randint(10,60)
-            logger.warning("失败次数为 %d 等待 %02d 秒后继续处理" %(self.failed_num,pause_time))
-            self.thread_logger.warning("暂停 %02d 秒以尝试避免触发验证" %pause_time)
+            logger.warning("线程 %d 失败次数为 %d 等待 %02d 秒后继续处理" %(self.id,self.failed_num,pause_time))
+            self.thread_logger.warning("线程 %d 暂停 %02d 秒以尝试避免触发验证" %(self.id,pause_time))
             time.sleep(pause_time)
             self.run()
         logger.info("线程 %d 结束运行" %self.id)

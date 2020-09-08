@@ -39,7 +39,7 @@ def gen_bootstrap():
         "\""+sys.executable+"\" -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple\n",
         "reg ADD HKLM\SOFTWARE\Policies\Google\Chrome /v RendererCodeIntegrityEnabled /t REG_DWORD /d 0 /f\n",
         "del /F /S /Q requirements.txt\n"]
-    with open("bootstrap.bat","w",encoding="utf-8") as gennerator:
+    with open("bootstrap.bat","w",encoding="utf-8") as generator:
         generator.writelines(lines)
 try:
     import requests

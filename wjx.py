@@ -104,6 +104,7 @@ if os.path.exists("Chrome/App/chrome.exe")==False:
 def check_update(server:str):
     version=1.0
     zip_version=1.0
+    branch="devel"
     address=server+"/zhanghua000/wjx-auto-generator-env/raw/master/version.json"
     try:
         response=requests.get(address)
@@ -116,6 +117,9 @@ def check_update(server:str):
         ans=input("是否下载新版本？(Y/n)").lower()
         if ans=="n":
             return 2
+        if branch!=version_inf["branch"]:
+            logger.error("升级信息中的分支与实际分支不符")
+            return 4
         r=requests.get(server+"/zhanghua000/wjx-auto-generator/raw/"+str(version_inf["branch"])+"/wjx.py")
         shutil.copy("wjx.py","wjx.py.bak")
         with open("wjx.py","w",encoding="utf-8") as updater:
@@ -165,6 +169,8 @@ elif res==2:
     logger.warning("更新已被用户取消")
 elif res==3:
     logger.info("未发现更新")
+elif res==4:
+    logger.error("检查更新过程出现错误")
 times=int(input("请输入生成的问卷的份数："))
 if times>=warn_num:
     logger.warning("当前问卷份数较多，大于 %s 次，较易出现验证。" %warn_num)

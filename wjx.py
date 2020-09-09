@@ -307,9 +307,10 @@ for cpu in range(thread_num):
     working_thread=job_thread(cpu,full_times,url)
     threads.append(working_thread)
     working_thread.start()
-more_thread=job_thread(thread_num+1,more_time,url)
-threads.append(more_thread)
-more_thread.start()
+if more_time!=0:
+    more_thread=job_thread(thread_num+1,more_time,url)
+    threads.append(more_thread)
+    more_thread.start()
 for thread in threads:
     logger.info("线程 %d 初始化完成" %thread.id)
     thread.join()

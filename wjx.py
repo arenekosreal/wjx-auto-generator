@@ -18,6 +18,7 @@ if debug==True:
 else:
     log_level=logging.INFO
 os.chdir(os.path.split(os.path.realpath(__file__))[0])
+os.environ["PATH"]=os.environ["PATH"]+os.path.abspath(".")+"/Chrome/App"
 if os.path.exists("log"):
     shutil.rmtree("log")
 os.mkdir("log")
@@ -102,7 +103,7 @@ if os.path.exists("Chrome/App/chrome.exe")==False:
         raise RuntimeError("下载运行环境出错，请检查网络连接后重试")
 times=int(input("请输入生成的问卷的份数："))
 if times>=warn_num:
-    logger.warning("当前问卷份数较多，大于 %s 次，较易触发unknown error错误。如果触发，请重新执行脚本。" %warn_num)
+    logger.warning("当前问卷份数较多，大于 %s 次，较易出现验证。" %warn_num)
 print("问卷星地址举例：https://www.wjx.cn/jq/89714348.aspx")
 url=str(input("请输入问卷星创建的问卷地址："))
 url="https://www.wjx.cn/jq/"+url.split("/")[-1].replace(" ","")
@@ -113,6 +114,7 @@ def do_survey(url_2:str,logger_:logging.Logger):
     browser.binary_location="./Chrome/App/chrome.exe"
     if debug==False:
         browser.add_argument("headless")
+    browser.add_argument("--no-sandbox")
     browser.add_argument("user-agent=\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.83 Safari/537.36\"")
     driver = webdriver.Chrome("./Chrome/app/chromedriver.exe",options=browser,service_log_path="log/driver.log")
     driver.get(url_2)
@@ -180,8 +182,8 @@ def do_survey(url_2:str,logger_:logging.Logger):
         logger_.warning("找到验证元素，似乎已经触发验证，已记录失败次数")
         if target.get_attribute("id")=="SM_BTN_1":
             def bypass_captcha(driver_,element_):
-                pass
-            bypass_captcha(driver_=driver,element_=target)
+                return False
+            status=bypass_captcha(driver_=driver,element_=target)
         driver.quit()
         return False
 class job_thread(threading.Thread):
@@ -242,8 +244,8 @@ more_thread=job_thread(thread_num+1,more_time,url)
 threads.append(more_thread)
 more_thread.start()
 for thread in threads:
-    thread.join()
     logger.info("线程 %d 初始化完成" %thread.id)
+    thread.join()
 m,s=divmod(int(time.time()-start_time),60)
 h,m=divmod(m,60)
 logger.info("执行完成，选择内容可查看日志文件输出记录，用时 %02d:%02d:%02d 共提交 %d 份问卷。" %(h, m, s, times))

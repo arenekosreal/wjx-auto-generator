@@ -107,10 +107,10 @@ def check_update(server:str):
     address=server+"/zhanghua000/wjx-auto-generator-env/raw/master/version.json"
     try:
         response=requests.get(address)
+        version_inf=response.json()
     except:
         logger.error("检查更新失败")
         return -1
-    version_inf=response.json()
     if version_inf["version"]>version:
         logger.info("已发现更新，将获取新版本脚本")
         ans=input("是否下载新版本？(Y/n)").lower()
@@ -145,8 +145,10 @@ def check_update(server:str):
             os.remove("Chrome/env.zip")
             logger.info("更新运行环境完成")
     return 0
-res=check_update("https://download.fastgit.org")
-if res==0:
+res=check_update("https://hub.fastgit.org")
+if res==-1:
+    logger.error("下载版本信息失败")
+elif res==0:
     logger.info("更新成功")
 elif res==1:
     logger.error("文件下载出错，验证失败")

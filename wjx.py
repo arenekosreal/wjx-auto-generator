@@ -112,7 +112,7 @@ def check_update(server:str):
         logger.error("检查更新失败")
         return -1
     if version_inf["version"]>version:
-        logger.info("已发现更新，将获取新版本脚本")
+        logger.info("已发现脚本更新")
         ans=input("是否下载新版本？(Y/n)").lower()
         if ans=="n":
             return 2
@@ -126,10 +126,13 @@ def check_update(server:str):
                 logging.error("MD5验证失败，取消本次更新")
                 shutil.move("wjx.py.bak","wjx.py")
                 return 1
+    else:
+        logger.info("未发现脚本更新")
     if version_inf["zip_version"]>zip_version:
+        logger.info("已发现运行环境更新")
         shutil.rmtree("Chrome")
         os.mkdir("Chrome")
-        logger.info("正在更新运行环境至 %f" %zip_version)
+        logger.info("正在更新运行环境至 %f" %version_inf["zip_version"])
         rz=requests.get(server+"/zhanghua000/wjx-auto-generator-env/releases/download/"+str(zip_version)+"/env.zip")
         with open("Chrome/env.zip","wb") as env_updater:
             env_updater.write(rz.content)
@@ -144,6 +147,9 @@ def check_update(server:str):
                 archive.extractall("Chrome")
             os.remove("Chrome/env.zip")
             logger.info("更新运行环境完成")
+    else:
+        logger.info("未发现运行环境更新")
+        return 3
     return 0
 res=check_update("https://hub.fastgit.org")
 if res==-1:
@@ -154,6 +160,8 @@ elif res==1:
     logger.error("文件下载出错，验证失败")
 elif res==2:
     logger.warning("更新已被用户取消")
+elif res==3:
+    logger.info("未发现更新")
 times=int(input("请输入生成的问卷的份数："))
 if times>=warn_num:
     logger.warning("当前问卷份数较多，大于 %s 次，较易出现验证。" %warn_num)

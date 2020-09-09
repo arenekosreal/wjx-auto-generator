@@ -130,6 +130,9 @@ def check_update(server:str):
         logger.info("未发现脚本更新")
     if version_inf["zip_version"]>zip_version:
         logger.info("已发现运行环境更新")
+        ans=input("是否下载新版本？(Y/n)").lower()
+        if ans=="n":
+            return 2
         shutil.rmtree("Chrome")
         os.mkdir("Chrome")
         logger.info("正在更新运行环境至 %f" %version_inf["zip_version"])
@@ -257,6 +260,9 @@ class job_thread(threading.Thread):
         self.thread_logger.addHandler(thread_log_handler)
         threading.Thread.__init__(self)
     def run(self):
+        if self.times==0:
+            self.thread_logger.info("线程 %d 无任务" %self.id)
+            return 0
         self.failed_num=0
         self.thread_logger.info("线程 "+str(self.id)+" 开始执行")
         max_conn=3

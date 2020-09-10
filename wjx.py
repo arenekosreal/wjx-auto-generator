@@ -2,7 +2,7 @@ import os
 import sys
 if os.name!="nt":
     raise RuntimeError("此脚本仅支持Windows XP SP2及更高版本")
-from multiprocessing import cpu_count
+from multiprocessing import cpu_count, Process
 import time
 import random
 import threading
@@ -306,20 +306,21 @@ class job_thread(threading.Thread):
             time.sleep(pause_time)
             self.run()
         logger.info("线程 %d 结束运行" %self.id)
-threads=[]
-thread_num=int(cpu_count()/2)
-full_times,more_time=divmod(times,thread_num)
-for cpu in range(thread_num):
-    working_thread=job_thread(cpu,full_times,url)
-    threads.append(working_thread)
-    working_thread.start()
-if more_time!=0:
-    more_thread=job_thread(thread_num+1,more_time,url)
-    threads.append(more_thread)
-    more_thread.start()
-for thread in threads:
-    logger.info("线程 %d 初始化完成" %thread.id)
-    thread.join()
-m,s=divmod(int(time.time()-start_time),60)
-h,m=divmod(m,60)
-logger.info("执行完成，选择内容可查看日志文件输出记录，用时 %02d:%02d:%02d 共提交 %d 份问卷。" %(h, m, s, times))
+if __name__=="__main__":
+    threads=[]
+    thread_num=int(cpu_count()/2)
+    full_times,more_time=divmod(times,thread_num)
+    for cpu in range(thread_num):
+        working_thread=job_thread(cpu,full_times,url)
+        threads.append(working_thread)
+        working_thread.start()
+    if more_time!=0:
+        more_thread=job_thread(thread_num+1,more_time,url)
+        threads.append(more_thread)
+        more_thread.start()
+    for thread in threads:
+        logger.info("线程 %d 初始化完成" %thread.id)
+        thread.join()
+    m,s=divmod(int(time.time()-start_time),60)
+    h,m=divmod(m,60)
+    logger.info("执行完成，选择内容可查看日志文件输出记录，用时 %02d:%02d:%02d 共提交 %d 份问卷。" %(h, m, s, times))

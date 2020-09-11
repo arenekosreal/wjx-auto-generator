@@ -83,7 +83,7 @@ def check_update(server:str,logger:logging.Logger):
     return 0
 def do_survey(url_2:str,logger_:logging.Logger):
     from selenium import webdriver
-    from selenium.common.exceptions import NoSuchElementException
+    from selenium.common.exceptions import NoSuchElementException, WebDriverException
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support import expected_conditions
@@ -91,7 +91,11 @@ def do_survey(url_2:str,logger_:logging.Logger):
     browser.binary_location="./Chrome/App/chrome.exe"
     if debug==False:
         browser.add_argument("headless")
-    driver = webdriver.Chrome("./Chrome/app/chromedriver.exe",options=browser)
+    try:
+        driver = webdriver.Chrome("./Chrome/app/chromedriver.exe",options=browser)
+    except WebDriverException:
+        logger_.error("触发unknown error错误")
+        return False
     driver.get(url_2)
     element = WebDriverWait(driver, 10).until(expected_conditions.element_to_be_clickable((By.ID,'submit_button')))
     def do_queue(driver_=driver,logger_=logger_):
@@ -165,7 +169,11 @@ def do_survey(url_2:str,logger_:logging.Logger):
             status=bypass_captcha(driver_=driver,element_=target)
         driver.quit()
         return False
-def multicoreproc(id_:int,url_:str,times:int,log_level:int):
+def multicoreproc(args_:list):
+    id_=args_[0]
+    url_=args_[1]
+    times=args_[2]
+    log_level=args_[3]
     max_conn=3
     failed_num=0
     thread_logger=logging.getLogger("thread_logger_"+str(id_))
@@ -203,7 +211,7 @@ def multicoreproc(id_:int,url_:str,times:int,log_level:int):
                 time.sleep(random.randint(3,5))
     else:
         raise ValueError("执行次数必须为正整数")
-    if failed_num!=0:
+    if failed_num>0:
         pause_time=random.randint(10,60)
         thread_logger.warning("线程 %d 失败 %d 次，等待 %2d 秒后将继续补齐失败次数" %(id_,failed_num,pause_time))
         times=failed_num
@@ -315,12 +323,12 @@ if __name__=="__main__":
     thread_num=int(cpu_count()/2)
     times_,more_times_=divmod(times,thread_num)
     if more_times_!=0:
-        more_thread=Process(target=multicoreproc,args=(thread_num+1,url,more_times_,log_level))
+        more_thread=Process(target=multicoreproc,args=([thread_num+1,url,more_times_,log_level],))
         more_thread.start()
         threads.append(more_thread)
     if times_!=0:
         for thread_id in range(thread_num):
-            thread=Process(target=multicoreproc,args=(thread_id,url,times_,log_level))
+            thread=Process(target=multicoreproc,args=([thread_id,url,times_,log_level],))
             thread.start()
             threads.append(thread)
     if len(threads)!=0:

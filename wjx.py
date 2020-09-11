@@ -1,34 +1,20 @@
 import os 
 import sys
-if os.name!="nt":
-    raise RuntimeError("此脚本仅支持Windows XP SP2及更高版本")
 from multiprocessing import cpu_count, Process
 import time
 import random
 import shutil
-import zipfile
 import hashlib
 import subprocess
 import logging
 debug=False
 warn_num=375
-def gen_bootstrap():
-    lines=[
-        "@echo off\n",
-        "%1 mshta vbscript:CreateObject(\"Shell.Application\").ShellExecute(\"cmd.exe\",\"/c %~s0 ::\",\"\",\"runas\",1)(window.close)&&exit\n",
-        "cd /d \"%~dp0\"\n",
-        "(echo selenium==3.141.0\necho requests==2.23.0) > requirements.txt\n",
-        "\""+sys.executable+"\" -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple\n",
-        "reg ADD HKLM\SOFTWARE\Policies\Google\Chrome /v RendererCodeIntegrityEnabled /t REG_DWORD /d 0 /f\n",
-        "del /F /S /Q requirements.txt\n"]
-    with open("bootstrap.bat","w",encoding="utf-8") as generator:
-        generator.writelines(lines)
 def check_update(server:str):
     import requests
     version=1.1
     zip_version=1.0
-    branch="devel"
-    address=server+"/zhanghua000/wjx-auto-generator-env/raw/master/version.json"
+    branch="raspberrypi"
+    address=server+"/zhanghua000/wjx-auto-generator-env/raw/"+branch+"/version.json"
     try:
         response=requests.get(address)
         version_inf=response.json()
@@ -55,31 +41,6 @@ def check_update(server:str):
                 return 1
     else:
         logger.info("未发现脚本更新")
-    if version_inf["zip_version"]>zip_version:
-        logger.info("已发现运行环境更新")
-        ans=input("是否下载新版本？(Y/n)").lower()
-        if ans=="n":
-            return 2
-        shutil.rmtree("Chrome")
-        os.mkdir("Chrome")
-        logger.info("正在更新运行环境至 %f" %version_inf["zip_version"])
-        rz=requests.get(server+"/zhanghua000/wjx-auto-generator-env/releases/download/"+str(zip_version)+"/env.zip")
-        with open("Chrome/env.zip","wb") as env_updater:
-            env_updater.write(rz.content)
-        with open("Chrome/env.zip","rb") as env_updater_:
-            md5=hashlib.md5(env_updater_.read()).hexdigest()
-        if md5!=version_inf["env_md5"]:
-            logger.error("下载的环境的MD5不符，终止更新")
-            os.remove("Chrome/env.zip")
-            return 1
-        else:
-            with zipfile.ZipFile("Chrome/env.zip","r",compression=zipfile.ZIP_DEFLATED) as archive:
-                archive.extractall("Chrome")
-            os.remove("Chrome/env.zip")
-            logger.info("更新运行环境完成")
-    else:
-        logger.info("未发现运行环境更新")
-        return 3
     return 0
 def do_survey(url_2:str,logger_:logging.Logger):
     from selenium import webdriver
@@ -87,13 +48,12 @@ def do_survey(url_2:str,logger_:logging.Logger):
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support import expected_conditions
-    browser=webdriver.ChromeOptions()
-    browser.binary_location="./Chrome/App/chrome.exe"
+    browser=webdriver.FirefoxOptions()
+    profile=webdriver.FirefoxProfile()
     if debug==False:
-        browser.add_argument("headless")
-    browser.add_argument("--no-sandbox")
-    browser.add_argument("user-agent=\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.83 Safari/537.36\"")
-    driver = webdriver.Chrome("./Chrome/app/chromedriver.exe",options=browser)
+        browser.add_argument("--headless")
+    profile.set_preference("general.useragent.override","Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.83 Safari/537.36")
+    driver = webdriver.Firefox(options=browser,firefox_profile=profile)
     driver.get(url_2)
     wait = WebDriverWait(driver, 10)
     element = wait.until(expected_conditions.element_to_be_clickable((By.ID,'submit_button')))
@@ -226,66 +186,6 @@ if __name__=="__main__":
     files_.setFormatter(formatter)
     logger.addHandler(console)
     logger.addHandler(files_)
-    try:
-        import requests
-        from selenium import webdriver
-        from selenium.common.exceptions import NoSuchElementException
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.common.by import By
-        from selenium.webdriver.support import expected_conditions
-    except:
-        logger.info("正在初始化依赖环境。。。")
-        gen_bootstrap()
-        try:
-            subprocess.run("bootstrap.bat")
-        except:
-            raise RuntimeError("初始化依赖环境失败，请手动执行 bootstrap.bat 完成初始化。弹出的UAC认证提示请予以通过")
-        else:
-            os.remove("bootstrap.bat")
-            logger.info("初始化依赖环境完成")
-    else:
-        logger.info("依赖环境正常")
-        if os.path.exists("bootstrap.bat")==True:
-            os.remove("bootstrap.bat")
-        if os.path.exists("Chrome/env.zip")==True:
-            os.remove("Chrome/env.zip")
-    if os.path.exists("Chrome")==False:
-        os.mkdir("Chrome")
-    if os.path.exists("Chrome/App/chrome.exe")==False:
-        logger.info("正在初始化运行环境。。。")
-        envaddr_list=["https://github.wuyanzheshui.workers.dev","https://download.fastgit.org"]
-        def unpack(md5_:str):
-            with open("Chrome/env.zip","rb") as file_reader:
-                md5=hashlib.md5(file_reader.read()).hexdigest()
-            if md5==md5_:
-                with zipfile.ZipFile("Chrome/env.zip","r",compression=zipfile.ZIP_DEFLATED) as archive:
-                    archive.extractall("Chrome")
-                os.remove("Chrome/env.zip")
-                return 0
-            else:
-                logger.error("文件MD5不符，终止解压缩")
-                return 1
-        def down_env(addr_head:str):
-            zip_md5="dcf2981ec68a72e206f949066ee8eedd"
-            if os.path.exists("Chrome/env.zip")==False:
-                envaddr=addr_head+"/zhanghua000/wjx-auto-generator-env/releases/download/1.0/env.zip"
-                with open("Chrome/env.zip","wb") as file_downloader:
-                    file_downloader.write(requests.get(envaddr).content)
-            if unpack(zip_md5)==1:
-                logger.warning("下载失败，请手动下载 "+envaddr+" 并以 env.zip 的文件名保存到Chrome目录下，之后重启程序")
-                return 1
-            else:
-                return 0
-        def check_stat(list_:list):
-            result=[]
-            for addr in list_:
-                resp=requests.get(addr)
-                if resp.status_code==200:
-                    result.append(addr)
-            return result
-        choosen_head=random.sample(check_stat(envaddr_list),1)[0]
-        if down_env(choosen_head)==1:
-            raise RuntimeError("下载运行环境出错，请检查网络连接后重试")
     res=check_update("https://hub.fastgit.org")
     if res==-1:
         logger.error("下载版本信息失败")

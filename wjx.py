@@ -1,87 +1,7 @@
-import os 
-import sys
-if os.name!="nt":
-    raise RuntimeError("此脚本仅支持Windows XP SP2及更高版本")
 from multiprocessing import cpu_count, Process
-import time
-import random
-import shutil
-import zipfile
-import hashlib
-import subprocess
-import logging
-debug=False
-warn_num=375
-def gen_bootstrap():
-    lines=[
-        "@echo off\n",
-        "%1 mshta vbscript:CreateObject(\"Shell.Application\").ShellExecute(\"cmd.exe\",\"/c %~s0 ::\",\"\",\"runas\",1)(window.close)&&exit\n",
-        "cd /d \"%~dp0\"\n",
-        "(echo selenium==3.141.0\necho requests==2.23.0) > requirements.txt\n",
-        "\""+sys.executable+"\" -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple\n",
-        "reg ADD HKLM\SOFTWARE\Policies\Google\Chrome /v RendererCodeIntegrityEnabled /t REG_DWORD /d 0 /f\n",
-        "del /F /S /Q requirements.txt\n"]
-    with open("bootstrap.bat","w",encoding="utf-8") as generator:
-        generator.writelines(lines)
-def check_update(server:str,logger:logging.Logger):
-    import requests
-    version=1.1
-    zip_version=1.0
-    branch="devel"
-    address=server+"/zhanghua000/wjx-auto-generator-env/raw/master/version.json"
-    try:
-        response=requests.get(address)
-        version_inf=response.json()
-    except:
-        logger.error("检查更新失败")
-        return -1
-    if version_inf["version"]>version:
-        logger.info("已发现脚本更新")
-        ans=input("是否下载新版本？(Y/n)").lower()
-        if ans=="n":
-            return 2
-        if branch!=version_inf["branch"]:
-            logger.error("升级信息中的分支与实际分支不符")
-            return 4
-        r=requests.get(server+"/zhanghua000/wjx-auto-generator/raw/"+str(version_inf["branch"])+"/wjx.py")
-        shutil.copy("wjx.py","wjx.py.bak")
-        with open("wjx.py","w",encoding="utf-8") as updater:
-            updater.write(r.read)
-        with open("wjx.py","rb") as md5_checker:
-            md5=hashlib.md5(md5_checker.read()).hexdigest()
-            if md5!=version_inf["scr_md5"]:
-                logging.error("MD5验证失败，取消本次更新")
-                shutil.move("wjx.py.bak","wjx.py")
-                return 1
-    else:
-        logger.info("未发现脚本更新")
-    if version_inf["zip_version"]>zip_version:
-        logger.info("已发现运行环境更新")
-        ans=input("是否下载新版本？(Y/n)").lower()
-        if ans=="n":
-            return 2
-        shutil.rmtree("Chrome")
-        os.mkdir("Chrome")
-        logger.info("正在更新运行环境至 %f" %version_inf["zip_version"])
-        rz=requests.get(server+"/zhanghua000/wjx-auto-generator-env/releases/download/"+str(zip_version)+"/env.zip")
-        with open("Chrome/env.zip","wb") as env_updater:
-            env_updater.write(rz.content)
-        with open("Chrome/env.zip","rb") as env_updater_:
-            md5=hashlib.md5(env_updater_.read()).hexdigest()
-        if md5!=version_inf["env_md5"]:
-            logger.error("下载的环境的MD5不符，终止更新")
-            os.remove("Chrome/env.zip")
-            return 1
-        else:
-            with zipfile.ZipFile("Chrome/env.zip","r",compression=zipfile.ZIP_DEFLATED) as archive:
-                archive.extractall("Chrome")
-            os.remove("Chrome/env.zip")
-            logger.info("更新运行环境完成")
-    else:
-        logger.info("未发现运行环境更新")
-        return 3
-    return 0
-def do_survey(url_2:str,logger_:logging.Logger):
+def do_survey(url_2:str,logger_,debug:bool):
+    import time
+    import random
     from selenium import webdriver
     from selenium.common.exceptions import NoSuchElementException, WebDriverException
     from selenium.webdriver.support.ui import WebDriverWait
@@ -169,11 +89,10 @@ def do_survey(url_2:str,logger_:logging.Logger):
             status=bypass_captcha(driver_=driver,element_=target)
         driver.quit()
         return False
-def multicoreproc(args_:list):
-    id_=args_[0]
-    url_=args_[1]
-    times=args_[2]
-    log_level=args_[3]
+def multicoreproc(id_:int,url_:str,times:int,log_level:int,debug:bool):
+    import logging
+    import random
+    import time
     max_conn=3
     failed_num=0
     thread_logger=logging.getLogger("thread_logger_"+str(id_))
@@ -184,7 +103,7 @@ def multicoreproc(args_:list):
     if times>0:
         if times<=max_conn:
             for time0 in range(times):
-                if do_survey(url_2=url_,logger_=thread_logger)==False:
+                if do_survey(url_2=url_,logger_=thread_logger,debug=debug)==False:
                     failed_num=failed_num+1
                     thread_logger.error("线程 %d 第 %d 次提交失败" %(id_,time0))
                 else:
@@ -194,7 +113,7 @@ def multicoreproc(args_:list):
             times1,more_times=divmod(times,max_conn)
             if more_times!=0:
                 for time1 in range(more_times):
-                    if do_survey(url_2=url_,logger_=thread_logger)==False:
+                    if do_survey(url_2=url_,logger_=thread_logger,debug=debug)==False:
                         failed_num=failed_num+1
                         thread_logger.error("线程 %d 第 %d 次提交失败" %(id_,time1))
                     else:
@@ -202,7 +121,7 @@ def multicoreproc(args_:list):
                     time.sleep(random.randint(1,3))
             for time2 in range(times1):
                 for conn in range(max_conn):
-                    if do_survey(url_2=url_,logger_=thread_logger)==False:
+                    if do_survey(url_2=url_,logger_=thread_logger,debug=debug)==False:
                         failed_num=failed_num+1
                         thread_logger.error("线程 %d 第 %d 组第 %d 次提交失败" %(id_,time2,conn))
                     else:
@@ -216,9 +135,19 @@ def multicoreproc(args_:list):
         thread_logger.warning("线程 %d 失败 %d 次，等待 %2d 秒后将继续补齐失败次数" %(id_,failed_num,pause_time))
         times=failed_num
         time.sleep(pause_time)
-        multicoreproc(id_=id_,url_=url_,times=times,log_level=log_level)
+        multicoreproc(id_=id_,url_=url_,times=times,log_level=log_level,debug=debug)
     thread_logger.info("线程 %d 结束运行" %id_)
 if __name__=="__main__":
+    import os 
+    import random
+    import shutil
+    import logging
+    import subprocess
+    import time
+    debug=False
+    warn_num=375
+    if os.name!="nt":
+        raise RuntimeError("此脚本仅支持Windows XP SP2及更高版本")
     if debug==True:
         log_level=logging.DEBUG
     else:
@@ -236,6 +165,97 @@ if __name__=="__main__":
     files_.setFormatter(formatter)
     logger.addHandler(console)
     logger.addHandler(files_)
+    def gen_bootstrap():
+        import sys
+        lines=[
+            "@echo off\n",
+            "%1 mshta vbscript:CreateObject(\"Shell.Application\").ShellExecute(\"cmd.exe\",\"/c %~s0 ::\",\"\",\"runas\",1)(window.close)&&exit\n",
+            "cd /d \"%~dp0\"\n",
+            "(echo selenium==3.141.0\necho requests==2.23.0) > requirements.txt\n",
+            "\""+sys.executable+"\" -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple\n",
+            "reg ADD HKLM\SOFTWARE\Policies\Google\Chrome /v RendererCodeIntegrityEnabled /t REG_DWORD /d 0 /f\n",
+            "del /F /S /Q requirements.txt\n"]
+        with open("bootstrap.bat","w",encoding="utf-8") as generator:
+            generator.writelines(lines)
+    def unpack(md5_:str):
+        import hashlib
+        import zipfile
+        with open("Chrome/env.zip","rb") as file_reader:
+            md5=hashlib.md5(file_reader.read()).hexdigest()
+        if md5==md5_:
+            with zipfile.ZipFile("Chrome/env.zip","r",compression=zipfile.ZIP_DEFLATED) as archive:
+                archive.extractall("Chrome")
+            os.remove("Chrome/env.zip")
+            return 0
+        else:
+            logger.error("文件MD5不符，终止解压缩")
+            return 1
+    def down_env(addr_head:str,zip_md5="dcf2981ec68a72e206f949066ee8eedd",version="1.0"):
+        if os.path.exists("Chrome/env.zip")==False:
+            envaddr=addr_head+"/zhanghua000/wjx-auto-generator-env/releases/download/"+version+"/env.zip"
+            with open("Chrome/env.zip","wb") as file_downloader:
+                file_downloader.write(requests.get(envaddr).content)
+        if unpack(zip_md5)==1:
+            logger.warning("下载失败，请手动下载 "+envaddr+" 并以 env.zip 的文件名保存到Chrome目录下，之后重启程序")
+            return 1
+        else:
+            return 0
+    def check_stat(list_:list):
+        result=[]
+        for addr in list_:
+            resp=requests.get(addr)
+            if resp.status_code==200:
+                result.append(addr)
+        return result
+    def check_update(server:str):
+        import requests
+        import hashlib
+        import zipfile
+        version=1.1
+        zip_version=1.0
+        branch="devel"
+        address=server+"/zhanghua000/wjx-auto-generator-env/raw/master/version.json"
+        try:
+            response=requests.get(address)
+            version_inf=response.json()
+        except:
+            logger.error("检查更新失败")
+            return -1
+        if version_inf["version"]>version:
+            logger.info("已发现脚本更新")
+            ans=input("是否下载新版本？(Y/n)").lower()
+            if ans=="n":
+                return 2
+            if branch!=version_inf["branch"]:
+                logger.error("升级信息中的分支与实际分支不符")
+                return 4
+            r=requests.get(server+"/zhanghua000/wjx-auto-generator/raw/"+str(version_inf["branch"])+"/wjx.py")
+            shutil.copy("wjx.py","wjx.py.bak")
+            with open("wjx.py","w",encoding="utf-8") as updater:
+                updater.write(r.read)
+            with open("wjx.py","rb") as md5_checker:
+                md5=hashlib.md5(md5_checker.read()).hexdigest()
+                if md5!=version_inf["scr_md5"]:
+                    logging.error("MD5验证失败，取消本次更新")
+                    shutil.move("wjx.py.bak","wjx.py")
+                    return 1
+        else:
+            logger.info("未发现脚本更新")
+        if version_inf["zip_version"]>zip_version:
+            logger.info("已发现运行环境更新")
+            ans=input("是否下载新版本？(Y/n)").lower()
+            if ans=="n":
+                return 2
+            shutil.rmtree("Chrome")
+            os.mkdir("Chrome")
+            logger.info("正在更新运行环境至 %f" %version_inf["zip_version"])
+            re=down_env(server,zip_md5=version_inf["zip_md5"],version=version_inf["zip_version"])
+            if re==1:
+                return 1
+        else:
+            logger.info("未发现运行环境更新")
+            return 3
+        return 0
     try:
         import requests
         from selenium import webdriver
@@ -264,39 +284,10 @@ if __name__=="__main__":
     if os.path.exists("Chrome/App/chrome.exe")==False:
         logger.info("正在初始化运行环境。。。")
         envaddr_list=["https://github.wuyanzheshui.workers.dev","https://download.fastgit.org"]
-        def unpack(md5_:str):
-            with open("Chrome/env.zip","rb") as file_reader:
-                md5=hashlib.md5(file_reader.read()).hexdigest()
-            if md5==md5_:
-                with zipfile.ZipFile("Chrome/env.zip","r",compression=zipfile.ZIP_DEFLATED) as archive:
-                    archive.extractall("Chrome")
-                os.remove("Chrome/env.zip")
-                return 0
-            else:
-                logger.error("文件MD5不符，终止解压缩")
-                return 1
-        def down_env(addr_head:str):
-            zip_md5="dcf2981ec68a72e206f949066ee8eedd"
-            if os.path.exists("Chrome/env.zip")==False:
-                envaddr=addr_head+"/zhanghua000/wjx-auto-generator-env/releases/download/1.0/env.zip"
-                with open("Chrome/env.zip","wb") as file_downloader:
-                    file_downloader.write(requests.get(envaddr).content)
-            if unpack(zip_md5)==1:
-                logger.warning("下载失败，请手动下载 "+envaddr+" 并以 env.zip 的文件名保存到Chrome目录下，之后重启程序")
-                return 1
-            else:
-                return 0
-        def check_stat(list_:list):
-            result=[]
-            for addr in list_:
-                resp=requests.get(addr)
-                if resp.status_code==200:
-                    result.append(addr)
-            return result
         choosen_head=random.sample(check_stat(envaddr_list),1)[0]
         if down_env(choosen_head)==1:
             raise RuntimeError("下载运行环境出错，请检查网络连接后重试")
-    res=check_update("https://hub.fastgit.org",logger)
+    res=check_update("https://hub.fastgit.org")
     if res==-1:
         logger.error("下载版本信息失败")
     elif res==0:
@@ -323,12 +314,12 @@ if __name__=="__main__":
     thread_num=int(cpu_count()/2)
     times_,more_times_=divmod(times,thread_num)
     if more_times_!=0:
-        more_thread=Process(target=multicoreproc,args=([thread_num+1,url,more_times_,log_level],))
+        more_thread=Process(target=multicoreproc,args=(thread_num+1,url,more_times_,log_level,debug))
         more_thread.start()
         threads.append(more_thread)
     if times_!=0:
         for thread_id in range(thread_num):
-            thread=Process(target=multicoreproc,args=([thread_id,url,times_,log_level],))
+            thread=Process(target=multicoreproc,args=(thread_id,url,times_,log_level,debug))
             thread.start()
             threads.append(thread)
     if len(threads)!=0:

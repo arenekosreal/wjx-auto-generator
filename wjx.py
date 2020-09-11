@@ -23,7 +23,7 @@ def gen_bootstrap():
         "del /F /S /Q requirements.txt\n"]
     with open("bootstrap.bat","w",encoding="utf-8") as generator:
         generator.writelines(lines)
-def check_update(server:str):
+def check_update(server:str,logger:logging.Logger):
     import requests
     version=1.1
     zip_version=1.0
@@ -91,28 +91,30 @@ def do_survey(url_2:str,logger_:logging.Logger):
     browser.binary_location="./Chrome/App/chrome.exe"
     if debug==False:
         browser.add_argument("headless")
-    browser.add_argument("--no-sandbox")
-    browser.add_argument("user-agent=\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.83 Safari/537.36\"")
     driver = webdriver.Chrome("./Chrome/app/chromedriver.exe",options=browser)
     driver.get(url_2)
-    wait = WebDriverWait(driver, 10)
-    element = wait.until(expected_conditions.element_to_be_clickable((By.ID,'submit_button')))
+    element = WebDriverWait(driver, 10).until(expected_conditions.element_to_be_clickable((By.ID,'submit_button')))
     def do_queue(driver_=driver,logger_=logger_):
-        root_element=driver_.find_element_by_xpath("/html/body/div[2]/div[1]/div[2]/div[1]/div[1]/div[1]/div[2]/div[2]/fieldset")
-        question_elements=root_element.find_elements_by_class_name("div_question")
+        question_elements=driver_.find_elements_by_xpath('//div[@class="div_question"]')
         def gen_str(num:int):
             import string
-            return ''.join(random.sample(string.ascii_letters + string.digits, num))
-        for element in question_elements:
-            element_pos=question_elements.index(element)
-            question_title=element.find_element_by_xpath("./div[1]/div[2]").text
-            question_answers=element.find_elements_by_xpath("./div[2]/ul/li")
-            if question_answers[0].find_element_by_xpath("./input").get_attribute("type")=="radio":
+            return ''.join(random.sample(string.ascii_letters + string.digits, num))    
+        for question_element in question_elements:
+            question_element_pos=question_elements.index(question_element)
+            question_title=question_element.find_element_by_class_name("div_title_question").text
+            question_answers=question_element.find_elements_by_tag_name("li")
+            removed_num=0
+            for item in question_answers:
+                if item.get_attribute("class")=="notchoice":
+                    question_answers.remove(item)
+            logger_.info("已清理无效元素共 %d 个" %removed_num)
+            sample_element=question_answers[0].find_element_by_tag_name("input")
+            if sample_element.get_attribute("type")=="radio":
                 targets=random.sample(question_answers,1)
                 choose_answer_title=targets[0].find_element_by_tag_name("label").text
                 targets[0].find_element_by_tag_name("a").click()
                 time.sleep(random.randint(1,3))
-            elif question_answers[0].find_element_by_tag_name("input").get_attribute("type")=="checkbox":
+            elif sample_element.get_attribute("type")=="checkbox":
                 choose_num=random.randint(2,len(question_answers))
                 choose_answers=[]
                 choose_answers_pos=[]
@@ -135,7 +137,7 @@ def do_survey(url_2:str,logger_:logging.Logger):
                     else:
                         choose_answer_title=choose_answer_title+"\n"
                     time.sleep(random.randint(1,3))
-            elif question_answers[0].find_element_by_xpath("./input").get_attribute("type")=="text":
+            elif sample_element.get_attribute("type")=="text":
                 target=question_answers[0]
                 target.click()
                 target.clear()
@@ -147,7 +149,7 @@ def do_survey(url_2:str,logger_:logging.Logger):
             logger_.info("选择内容：\n问题："+question_title+"\n选择："+choose_answer_title+"\n")
     do_queue(driver_=driver)
     time.sleep(random.randint(1,3))
-    driver.find_element_by_xpath("/html/body/div[2]/div[1]/div[2]/div[1]/div[1]/div[1]/div[2]/div[4]/table/tbody/tr/td/input").click()
+    driver.find_element_by_tag_name("td").find_element_by_tag_name("input").click()
     try:
         target=driver.find_element_by_xpath("/html/body/div[2]/div[1]/div[2]/div[1]/div[1]/div[1]/div[2]/div[4]/div[1]/div[1]/div[1]/div[1]/div[1]")
     except NoSuchElementException:
@@ -286,7 +288,7 @@ if __name__=="__main__":
         choosen_head=random.sample(check_stat(envaddr_list),1)[0]
         if down_env(choosen_head)==1:
             raise RuntimeError("下载运行环境出错，请检查网络连接后重试")
-    res=check_update("https://hub.fastgit.org")
+    res=check_update("https://hub.fastgit.org",logger)
     if res==-1:
         logger.error("下载版本信息失败")
     elif res==0:

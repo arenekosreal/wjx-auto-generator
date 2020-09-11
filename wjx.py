@@ -53,7 +53,7 @@ def do_survey(url_2:str,logger_:logging.Logger):
     if debug==False:
         browser.add_argument("--headless")
     profile.set_preference("general.useragent.override","Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.83 Safari/537.36")
-    driver = webdriver.Firefox(options=browser,firefox_profile=profile)
+    driver = webdriver.Firefox(options=browser,firefox_profile=profile,service_log_path="log/driver.log")
     driver.get(url_2)
     wait = WebDriverWait(driver, 10)
     element = wait.until(expected_conditions.element_to_be_clickable((By.ID,'submit_button')))

@@ -10,3 +10,6 @@
 位于`devel`分支，相比于`master`分支更不稳定，甚至正常执行都有可能出问题，但有更多正在开发的新特性
 ## linux版本
 位于`raspberrypi`分支，默认需要手动安装selenium和requests，使用Firefox作为模拟浏览器，目标为在树莓派上运行。可自行修改改为使用Chrome
+## 已知问题
+- logging在多进程下无法准确保存日志
+- 失败次数计数不准确

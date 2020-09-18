@@ -39,7 +39,7 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
         import time
         import random
         from selenium import webdriver
-        from selenium.common.exceptions import NoSuchElementException, WebDriverException
+        from selenium.common.exceptions import NoSuchElementException, WebDriverException, ElementNotInteractableException
         from selenium.webdriver.support.ui import WebDriverWait
         from selenium.webdriver.common.by import By
         from selenium.webdriver.support import expected_conditions
@@ -50,9 +50,12 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
         try:
             driver = webdriver.Chrome(executable_path="./Chrome/app/chromedriver.exe",options=browser)
         except WebDriverException:
-            thread_logger.error("线程 %d 触发unknown error错误" %thread_id)
+            thread_logger.error("线程 %d 初始化浏览器驱动程序失败" %thread_id)
             return False
-        driver.get(url_2)
+        try:
+            driver.get(url_2)
+        except WebDriverException:
+            thread_logger.error("线程 %d 连接目标网址失败，请检查网络连接后重试" %thread_id)
         element = WebDriverWait(driver, 10).until(expected_conditions.element_to_be_clickable((By.ID,'submit_button')))
         def do_queue(driver_=driver):
             question_elements=driver_.find_elements_by_xpath('//div[@class="div_question"]')
@@ -61,7 +64,8 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
                 return ''.join(random.sample(string.ascii_letters + string.digits, num))    
             for question_element in question_elements:
                 question_element_pos=question_elements.index(question_element)
-                question_title=question_element.find_element_by_class_name("div_title_question").text
+                title_element=question_element.find_element_by_class_name("div_title_question")
+                question_title=title_element.text
                 question_answers=question_element.find_elements_by_tag_name("li")
                 if len(question_answers)==0:
                     question_answers=[question_element.find_element_by_tag_name("textarea")]
@@ -85,6 +89,14 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
                     choose_answers=[]
                     choose_answers_pos=[]
                     choose_answer_title=""
+                    try:
+                        span_element=title_element.find_element_by_tag_name("span")
+                    except NoSuchElementException:
+                        pass
+                    else:
+                        max_num=int(span_element.find_elements_by_tag_name("b")[1].text)
+                        if max_num>2:
+                            choose_num=random.randint(2,max_num)
                     targets=random.sample(question_answers,choose_num)
                     for target in targets:
                         choose_answers.append(target)
@@ -213,7 +225,9 @@ if __name__=="__main__":
         import zipfile
         with open("Chrome/env.zip","rb") as file_reader:
             md5=hashlib.md5(file_reader.read()).hexdigest()
-        if md5==md5_:
+        if md5==md5_ or md5_=="":
+            if md5_=="":
+                logger.warning("未传入压缩文件的MD5值，跳过验证")
             with zipfile.ZipFile("Chrome/env.zip","r",compression=zipfile.ZIP_DEFLATED) as archive:
                 archive.extractall("Chrome")
             os.remove("Chrome/env.zip")
@@ -222,8 +236,9 @@ if __name__=="__main__":
             logger.error("文件MD5不符，终止解压缩")
             return 1
     def down_env(addr_head:str,zip_md5="dcf2981ec68a72e206f949066ee8eedd",version="1.0"):
+        import requests
+        envaddr=addr_head+"/zhanghua000/wjx-auto-generator-env/releases/download/"+str(version)+"/env.zip"
         if os.path.exists("Chrome/env.zip")==False:
-            envaddr=addr_head+"/zhanghua000/wjx-auto-generator-env/releases/download/"+version+"/env.zip"
             with open("Chrome/env.zip","wb") as file_downloader:
                 file_downloader.write(requests.get(envaddr).content)
         if unpack(zip_md5)==1:
@@ -232,6 +247,7 @@ if __name__=="__main__":
         else:
             return 0
     def check_stat(list_:list):
+        import requests
         result=[]
         for addr in list_:
             resp=requests.get(addr)
@@ -309,14 +325,14 @@ if __name__=="__main__":
         if os.path.exists("bootstrap.bat")==True:
             os.remove("bootstrap.bat")
         if os.path.exists("Chrome/env.zip")==True:
-            os.remove("Chrome/env.zip")
+            unpack("")
     if os.path.exists("Chrome")==False:
         os.mkdir("Chrome")
     if os.path.exists("Chrome/App/chrome.exe")==False:
         logger.info("正在初始化运行环境。。。")
         envaddr_list=["https://github.wuyanzheshui.workers.dev","https://download.fastgit.org"]
         choosen_head=random.sample(check_stat(envaddr_list),1)[0]
-        if down_env(choosen_head)==1:
+        if down_env("https://download.fastgit.org")==1:
             raise RuntimeError("下载运行环境出错，请检查网络连接后重试")
     res=check_update("https://hub.fastgit.org")
     if res==-1:

@@ -2,7 +2,7 @@ from multiprocessing import cpu_count, Process, Manager, Queue
 class config:
     debug=False
     warn_num=375
-    branch="devel"
+    branch="master"
     version=1.1
     zip_version=1.0
 def process_log(queue):

@@ -2,6 +2,9 @@ from multiprocessing import cpu_count, Process, Manager, Queue
 class config:
     debug=False
     warn_num=375
+    branch="devel"
+    version=1.1
+    zip_version=1.0
 def process_log(queue):
     import logging
     logger_=logging.getLogger()
@@ -264,9 +267,6 @@ if __name__=="__main__":
         import requests
         import hashlib
         import zipfile
-        version=1.1
-        zip_version=1.0
-        branch="devel"
         address=server+"/zhanghua000/wjx-auto-generator-env/raw/master/version.json"
         try:
             response=requests.get(address)
@@ -274,12 +274,12 @@ if __name__=="__main__":
         except:
             logger.error("检查更新失败")
             return -1
-        if version_inf["version"]>version:
+        if version_inf["version"]>config.version:
             logger.info("已发现脚本更新")
             ans=input("是否下载新版本？(Y/n)").lower()
             if ans=="n":
                 return 2
-            if branch!=version_inf["branch"]:
+            if config.branch!=version_inf["branch"]:
                 logger.error("升级信息中的分支与实际分支不符")
                 return 4
             r=requests.get(server+"/zhanghua000/wjx-auto-generator/raw/"+str(version_inf["branch"])+"/wjx.py")
@@ -294,7 +294,7 @@ if __name__=="__main__":
                     return 1
         else:
             logger.info("未发现脚本更新")
-        if version_inf["zip_version"]>zip_version:
+        if version_inf["zip_version"]>config.zip_version:
             logger.info("已发现运行环境更新")
             ans=input("是否下载新版本？(Y/n)").lower()
             if ans=="n":

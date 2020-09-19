@@ -39,7 +39,7 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
         import time
         import random
         from selenium import webdriver
-        from selenium.common.exceptions import NoSuchElementException, WebDriverException, ElementNotInteractableException
+        from selenium.common.exceptions import NoSuchElementException, WebDriverException, TimeoutException
         from selenium.webdriver.support.ui import WebDriverWait
         from selenium.webdriver.common.by import By
         from selenium.webdriver.support import expected_conditions
@@ -56,7 +56,12 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
             driver.get(url_2)
         except WebDriverException:
             thread_logger.error("线程 %d 连接目标网址失败，请检查网络连接后重试" %thread_id)
-        element = WebDriverWait(driver, 10).until(expected_conditions.element_to_be_clickable((By.ID,'submit_button')))
+            return False
+        try:
+            element = WebDriverWait(driver, 10).until(expected_conditions.element_to_be_clickable((By.ID,'submit_button')))
+        except TimeoutException:
+            thread_logger.error("线程 %d 连接网络超时，请检查网络连接后重试" %thread_id)
+            return False
         def do_queue(driver_=driver):
             question_elements=driver_.find_elements_by_xpath('//div[@class="div_question"]')
             def gen_str(num:int):
@@ -101,9 +106,9 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
                     for target in targets:
                         choose_answers.append(target)
                         choose_answers_pos.append(question_answers.index(target))
+                    text=""
+                    choose_answer_title=""
                     for answer in choose_answers:
-                        text=""
-                        choose_answer_title=""
                         answer.find_element_by_tag_name("a").click()
                         choose_answer_title=choose_answer_title+answer.find_element_by_tag_name("label").text
                         if len(answer.find_elements_by_tag_name("input"))==2:

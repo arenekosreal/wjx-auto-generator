@@ -11,7 +11,7 @@ def process_log(queue):
         log_level=logging.INFO
     logger_.setLevel(log_level)
     formatter=logging.Formatter(fmt="%(asctime)s - %(levelname)s - %(message)s",datefmt="%Y-%m-%d %H:%M:%S")
-    handler=logging.FileHandler(filename="log/thread.log",mode="w",encoding="utf-8",delay=True)
+    handler=logging.FileHandler(filename="works.log",mode="w",encoding="utf-8",delay=True)
     handler.setFormatter(formatter)
     logger_.addHandler(handler)
     while True:
@@ -195,6 +195,7 @@ if __name__=="__main__":
     import os 
     import shutil
     import logging
+    import logging.handlers
     import subprocess
     import time
     if os.name!="nt":
@@ -204,19 +205,15 @@ if __name__=="__main__":
     else:
         log_level=logging.INFO
     os.chdir(os.path.split(os.path.realpath(__file__))[0])
-    if os.path.exists("log")==True:
-        shutil.rmtree("log")
-    os.mkdir("log")
     queue=Queue(-1)
     logger=logging.getLogger()
     logger.setLevel(log_level)
     formatter=logging.Formatter(fmt="%(asctime)s - %(levelname)s - %(message)s",datefmt="%Y-%m-%d %H:%M:%S")
     console=logging.StreamHandler()
     console.setFormatter(formatter)
-    files_=logging.FileHandler(filename="log/main.log",mode="w",encoding="utf-8",delay=True)
-    files_.setFormatter(formatter)
+    queue_handler=logging.handlers.QueueHandler(queue)
     logger.addHandler(console)
-    logger.addHandler(files_)
+    logger.addHandler(queue_handler)
     def gen_bootstrap():
         import sys
         lines=[
@@ -377,8 +374,8 @@ if __name__=="__main__":
     if len(threads)!=0:
         for thread_ in threads:
             thread_.join()
-    queue.put_nowait(None)
-    logger_process.join()
     m,s=divmod(int(time.time()-start_time),60)
     h,m=divmod(m,60)
-    logger.info("执行完成，选择内容可查看日志文件输出记录，用时 %02d:%02d:%02d 共提交 %d 份问卷。" %(h, m, s, times))
+    logger.info("执行完成，选择内容可查看日志文件输出记录，用时 %02d:%02d:%02d 共提交 %d 份问卷。具体选择内容请参考脚本目录下的 record.log 文件" %(h, m, s, times))
+    queue.put_nowait(None)
+    logger_process.join()

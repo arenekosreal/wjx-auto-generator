@@ -97,11 +97,16 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
                     try:
                         span_element=title_element.find_element_by_tag_name("span")
                     except NoSuchElementException:
-                        pass
+                        thread_logger.debug("线程 %d 未找到最大选择数量限制" %id_)
                     else:
-                        max_num=int(span_element.find_elements_by_tag_name("b")[1].text)
-                        if max_num>2:
-                            choose_num=random.randint(2,max_num)
+                        b_elements=span_element.find_elements_by_tag_name("b")
+                        if len(b_elements)>=2:
+                            max_num=int(b_elements[1].text)
+                            if max_num>2:
+                                choose_num=random.randint(2,max_num)
+                                thread_logger.debug("线程 %d 找到最大选择数量为 %d" %(id_,max_num))
+                        else:
+                            thread_logger.debug("线程 %d 未找到最大选择数量限制" %id_)
                     targets=random.sample(question_answers,choose_num)
                     for target in targets:
                         choose_answers.append(target)
@@ -188,7 +193,6 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
     thread_logger.info("线程 %d 结束运行" %id_)
 if __name__=="__main__":
     import os 
-    import random
     import shutil
     import logging
     import subprocess
@@ -311,10 +315,6 @@ if __name__=="__main__":
     try:
         import requests
         from selenium import webdriver
-        from selenium.common.exceptions import NoSuchElementException
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.common.by import By
-        from selenium.webdriver.support import expected_conditions
     except:
         logger.info("正在初始化依赖环境。。。")
         gen_bootstrap()
@@ -335,8 +335,6 @@ if __name__=="__main__":
         os.mkdir("Chrome")
     if os.path.exists("Chrome/App/chrome.exe")==False:
         logger.info("正在初始化运行环境。。。")
-        envaddr_list=["https://github.wuyanzheshui.workers.dev","https://download.fastgit.org"]
-        choosen_head=random.sample(check_stat(envaddr_list),1)[0]
         if down_env("https://download.fastgit.org")==1:
             raise RuntimeError("下载运行环境出错，请检查网络连接后重试")
     res=check_update("https://hub.fastgit.org")

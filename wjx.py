@@ -3,7 +3,7 @@ class config:
     debug=False
     warn_num=375
     branch="devel"
-    version=1.1
+    version=1.2
     zip_version=1.0
 def process_log(queue):
     import logging

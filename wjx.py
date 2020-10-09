@@ -1,4 +1,4 @@
-from multiprocessing import cpu_count, Process, Manager, Queue
+from multiprocessing import cpu_count, Process, Queue
 class config:
     debug=False
     warn_num=375
@@ -14,7 +14,7 @@ def process_log(queue):
         log_level=logging.INFO
     logger_.setLevel(log_level)
     formatter=logging.Formatter(fmt="%(asctime)s - %(levelname)s - %(message)s",datefmt="%Y-%m-%d %H:%M:%S")
-    handler=logging.FileHandler(filename="works.log",mode="w",encoding="utf-8",delay=True)
+    handler=logging.FileHandler(filename="record.log",mode="w",encoding="utf-8",delay=True)
     handler.setFormatter(formatter)
     logger_.addHandler(handler)
     while True:
@@ -42,7 +42,7 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
         import time
         import random
         from selenium import webdriver
-        from selenium.common.exceptions import NoSuchElementException, WebDriverException, TimeoutException
+        from selenium.common.exceptions import NoSuchElementException, WebDriverException, TimeoutException, ElementNotInteractableException
         from selenium.webdriver.support.ui import WebDriverWait
         from selenium.webdriver.common.by import By
         from selenium.webdriver.support import expected_conditions
@@ -67,6 +67,7 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
             return False
         def do_queue(driver_=driver):
             question_elements=driver_.find_elements_by_xpath('//div[@class="div_question"]')
+            choose_answer_title=""
             def gen_str(num:int):
                 import string
                 return ''.join(random.sample(string.ascii_letters + string.digits, num))    
@@ -75,14 +76,34 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
                 title_element=question_element.find_element_by_class_name("div_title_question")
                 question_title=title_element.text
                 question_answers=question_element.find_elements_by_tag_name("li")
-                if len(question_answers)==0:
-                    question_answers=[question_element.find_element_by_tag_name("textarea")]
+                if question_answers==[]:
+                    try:
+                        question_answers=[question_element.find_element_by_tag_name("textarea")]
+                    except NoSuchElementException:
+                        try:
+                            question_answers=[question_element.find_element_by_tag_name("select")]
+                        except NoSuchElementException:
+                            try:
+                                question_answers=[question_element.find_element_by_class_name("slider")]
+                            except NoSuchElementException:
+                                question_answers=[question_element.find_element_by_class_name("div_title_question")]
                 removed_num=0
+                sort_questions=[]
                 for item in question_answers:
                     if item.get_attribute("class")=="notchoice":
                         question_answers.remove(item)
                         removed_num=removed_num+1
+                    if item.get_attribute("class")=="lisort":
+                        sort_questions.append(item)
                 thread_logger.info("线程 %d 已清理无效元素共 %d 个" %(thread_id,removed_num))
+                if sort_questions!=[]:
+                    question_answers=sort_questions
+                try:
+                    special_ul=question_answers[0].find_element_by_tag_name("ul")
+                except NoSuchElementException:
+                    pass
+                else:
+                    question_answers=special_ul.find_elements_by_tag_name("li")
                 try:
                     sample_element=question_answers[0].find_element_by_tag_name("input")
                 except NoSuchElementException:
@@ -90,7 +111,12 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
                 if sample_element.get_attribute("type")=="radio":
                     targets=random.sample(question_answers,1)
                     choose_answer_title=targets[0].find_element_by_tag_name("label").text
-                    targets[0].find_element_by_tag_name("a").click()
+                    try:
+                        target_element=targets[0].find_element_by_tag_name("a")
+                    except ElementNotInteractableException:
+                        thread_logger.warning("线程 %d 触发动态脚本" %thread_id)
+                    else:
+                        target_element.click()
                     time.sleep(random.randint(1,3))
                 elif sample_element.get_attribute("type")=="checkbox":
                     choose_num=random.randint(2,len(question_answers))
@@ -117,8 +143,14 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
                     text=""
                     choose_answer_title=""
                     for answer in choose_answers:
-                        answer.find_element_by_tag_name("a").click()
-                        choose_answer_title=choose_answer_title+answer.find_element_by_tag_name("label").text
+                        try:
+                            target_element=answer.find_element_by_tag_name("a")
+                        except ElementNotInteractableException:
+                            thread_logger.warning("线程 %d 触发动态脚本" %thread_id)
+                        except NoSuchElementException:
+                            answer.click()
+                        else:
+                            target_element.click()
                         if len(answer.find_elements_by_tag_name("input"))==2:
                             text_input=answer.find_elements_by_tag_name("input")[1]
                             text_input.click()
@@ -136,7 +168,43 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
                     text=gen_str(random.randint(10,20))
                     target.send_keys(text)
                     choose_answer_title=text+"\n"
+                elif sample_element.get_attribute("class")=="select2-hidden-accessible":
+                    from selenium.webdriver.support.select import Select
+                    options=question_answers[0].find_elements_by_tag_name("option")
+                    values=[]
+                    for option in options:
+                        if option.get_attribute("value")!="-2":
+                            values.append(option.get_attribute("value"))
+                    select=Select(question_answers[0])
+                    select.select_by_value(random.sample(values,1)[0])
+                    choose_answer_title=select.first_selected_option.text
+                elif sample_element.get_attribute("type")=="text":
+                    texts=question_answers[0].find_elements_by_tag_name("input")
+                    for text_element in texts:
+                        #text_element.click()
+                        text_element.clear()
+                        text=gen_str(random.randint(3,5))
+                        text_element.send_keys(text)
+                        choose_answer_title=choose_answer_title+text+","
+                elif sample_element.get_attribute("class")=="lisort":
+                    targets=question_answers
+                    while True:
+                        choose=random.sample(targets,1)[0]
+                        choose.find_element_by_tag_name("span").click()
+                        targets.remove(choose)
+                        if targets==[]:
+                            break
+                elif sample_element.find_element_by_xpath(".//..").get_attribute("class")=="onscore":
+                    choose=random.sample(question_answers,1)[0]
+                    choose.click()
+                elif sample_element.get_attribute("class")=="slider":
+                    from selenium.webdriver import ActionChains
+                    lenth=random.randint(1,100)
+                    slider_element=question_answers[0]
+                    move=ActionChains(driver=driver_)
+                    move.click_and_hold(slider_element).move_by_offset(lenth,0).release().perform()
                 else:
+                    thread_logger.error("寻找得到的元素类型 %s 不属于预料之中的情况" %str(sample_element.get_attribute("type")))
                     raise RuntimeError("无法获取正确的元素，请重试！")
                 thread_logger.info("线程 "+str(thread_id)+" 选择内容：\n问题："+question_title+"\n选择："+choose_answer_title+"\n")
         do_queue(driver_=driver)

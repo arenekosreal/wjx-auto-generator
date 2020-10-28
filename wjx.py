@@ -1,10 +1,14 @@
-from multiprocessing import cpu_count, Process, Manager, Queue
+from multiprocessing import cpu_count, Process, Queue
 class config:
-    debug=False
-    warn_num=375
-    branch="master"
-    version=1.1
-    zip_version=1.0
+    # 一些基础信息配置
+    debug=False # 调试模式，打开会显示浏览器界面，日志等级改为 debug 帮助调试
+    warn_num=250 # 过高的问卷数目警告阈值
+    branch="master" # GitHub分支
+    version=1.2 # 程序版本
+    zip_version=1.0 # 运行环境版本
+    proxy_addr="https://ip.jiangxianli.com/country/%E4%B8%AD%E5%9B%BD?country=%E4%B8%AD%E5%9B%BD" # 代理服务器获取页面
+    git_download="https://download.fastgit.org" # GitHub下载镜像
+    git_raw="https://raw.fastgit.org" #GitHub获取原始文件的镜像
 def process_log(queue):
     import logging
     logger_=logging.getLogger()
@@ -14,7 +18,7 @@ def process_log(queue):
         log_level=logging.INFO
     logger_.setLevel(log_level)
     formatter=logging.Formatter(fmt="%(asctime)s - %(levelname)s - %(message)s",datefmt="%Y-%m-%d %H:%M:%S")
-    handler=logging.FileHandler(filename="works.log",mode="w",encoding="utf-8",delay=True)
+    handler=logging.FileHandler(filename="record.log",mode="w",encoding="utf-8",delay=True)
     handler.setFormatter(formatter)
     logger_.addHandler(handler)
     while True:
@@ -38,18 +42,53 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
     else:
         thread_logger.setLevel(logging.INFO)
     thread_logger.info("开始执行线程 %d 的工作内容" %id_)
-    def do_survey(url_2:str,thread_id:int):
+    def do_survey(url_2:str,thread_id:int,thread_logger=thread_logger):
         import time
         import random
+        import requests
+        from bs4 import BeautifulSoup
         from selenium import webdriver
-        from selenium.common.exceptions import NoSuchElementException, WebDriverException, TimeoutException
+        from selenium.common.exceptions import NoSuchElementException, WebDriverException, TimeoutException, ElementNotInteractableException
         from selenium.webdriver.support.ui import WebDriverWait
         from selenium.webdriver.common.by import By
         from selenium.webdriver.support import expected_conditions
         browser=webdriver.ChromeOptions()
         browser.binary_location="./Chrome/App/chrome.exe"
+        proxies=[]
+        try:
+            soup=BeautifulSoup(requests.get(config.proxy_addr).content,"lxml")
+        except:
+            thread_logger.warning("加载代理池信息出错，将使用直连模式")
+            proxies=[""]
+        else:
+            thread_logger.info("加载代理池信息成功！")
+            tbody=soup.find("tbody")
+            trs=tbody.find_all("tr")
+            for tr in trs:
+                tds=tr.find_all("td")
+                proxy_str=str(tds[3].text).lower()+"://"+str(tds[0].text)+":"+str(tds[1].text)
+                proxies.append(proxy_str)
+        del_num=0
+        for proxy_ in proxies:
+            if proxy_!="":
+                try:
+                    re=requests.get(url_2,proxies={"http":proxy_,"https":proxy_})
+                except BaseException:
+                    proxies.remove(proxy_)
+                    del_num=del_num+1
+                else:
+                    if re.status_code!=200:
+                        proxies.remove(proxy_)
+                        del_num=del_num+1
+        if proxies==[]:
+            proxies=[""]
+        thread_logger.debug("已删除 %s 个失效的代理，代理列表：%s" %(del_num,proxies))
+        proxy=random.choice(proxies)
+        thread_logger.debug("使用代理 %s" %proxy)
         if config.debug==False:
-            browser.add_argument("headless")
+            browser.add_argument("--headless")
+        if proxy!="":
+            browser.add_argument("--proxy-server="+proxy)
         try:
             driver = webdriver.Chrome(executable_path="./Chrome/app/chromedriver.exe",options=browser)
         except WebDriverException:
@@ -67,6 +106,7 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
             return False
         def do_queue(driver_=driver):
             question_elements=driver_.find_elements_by_xpath('//div[@class="div_question"]')
+            choose_answer_title=""
             def gen_str(num:int):
                 import string
                 return ''.join(random.sample(string.ascii_letters + string.digits, num))    
@@ -75,14 +115,34 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
                 title_element=question_element.find_element_by_class_name("div_title_question")
                 question_title=title_element.text
                 question_answers=question_element.find_elements_by_tag_name("li")
-                if len(question_answers)==0:
-                    question_answers=[question_element.find_element_by_tag_name("textarea")]
+                if question_answers==[]:
+                    try:
+                        question_answers=[question_element.find_element_by_tag_name("textarea")]
+                    except NoSuchElementException:
+                        try:
+                            question_answers=[question_element.find_element_by_tag_name("select")]
+                        except NoSuchElementException:
+                            try:
+                                question_answers=[question_element.find_element_by_class_name("slider")]
+                            except NoSuchElementException:
+                                question_answers=[question_element.find_element_by_class_name("div_title_question")]
                 removed_num=0
+                sort_questions=[]
                 for item in question_answers:
                     if item.get_attribute("class")=="notchoice":
                         question_answers.remove(item)
                         removed_num=removed_num+1
+                    if item.get_attribute("class")=="lisort":
+                        sort_questions.append(item)
                 thread_logger.info("线程 %d 已清理无效元素共 %d 个" %(thread_id,removed_num))
+                if sort_questions!=[]:
+                    question_answers=sort_questions
+                try:
+                    special_ul=question_answers[0].find_element_by_tag_name("ul")
+                except NoSuchElementException:
+                    pass
+                else:
+                    question_answers=special_ul.find_elements_by_tag_name("li")
                 try:
                     sample_element=question_answers[0].find_element_by_tag_name("input")
                 except NoSuchElementException:
@@ -90,7 +150,12 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
                 if sample_element.get_attribute("type")=="radio":
                     targets=random.sample(question_answers,1)
                     choose_answer_title=targets[0].find_element_by_tag_name("label").text
-                    targets[0].find_element_by_tag_name("a").click()
+                    try:
+                        target_element=targets[0].find_element_by_tag_name("a")
+                    except ElementNotInteractableException:
+                        thread_logger.warning("线程 %d 触发动态脚本" %thread_id)
+                    else:
+                        target_element.click()
                     time.sleep(random.randint(1,3))
                 elif sample_element.get_attribute("type")=="checkbox":
                     choose_num=random.randint(2,len(question_answers))
@@ -117,8 +182,14 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
                     text=""
                     choose_answer_title=""
                     for answer in choose_answers:
-                        answer.find_element_by_tag_name("a").click()
-                        choose_answer_title=choose_answer_title+answer.find_element_by_tag_name("label").text
+                        try:
+                            target_element=answer.find_element_by_tag_name("a")
+                        except ElementNotInteractableException:
+                            thread_logger.warning("线程 %d 触发动态脚本" %thread_id)
+                        except NoSuchElementException:
+                            answer.click()
+                        else:
+                            target_element.click()
                         if len(answer.find_elements_by_tag_name("input"))==2:
                             text_input=answer.find_elements_by_tag_name("input")[1]
                             text_input.click()
@@ -136,7 +207,43 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
                     text=gen_str(random.randint(10,20))
                     target.send_keys(text)
                     choose_answer_title=text+"\n"
+                elif sample_element.get_attribute("class")=="select2-hidden-accessible":
+                    from selenium.webdriver.support.select import Select
+                    options=question_answers[0].find_elements_by_tag_name("option")
+                    values=[]
+                    for option in options:
+                        if option.get_attribute("value")!="-2":
+                            values.append(option.get_attribute("value"))
+                    select=Select(question_answers[0])
+                    select.select_by_value(random.sample(values,1)[0])
+                    choose_answer_title=select.first_selected_option.text
+                elif sample_element.get_attribute("type")=="text":
+                    texts=question_answers[0].find_elements_by_tag_name("input")
+                    for text_element in texts:
+                        #text_element.click()
+                        text_element.clear()
+                        text=gen_str(random.randint(3,5))
+                        text_element.send_keys(text)
+                        choose_answer_title=choose_answer_title+text+","
+                elif sample_element.get_attribute("class")=="lisort":
+                    targets=question_answers
+                    while True:
+                        choose=random.sample(targets,1)[0]
+                        choose.find_element_by_tag_name("span").click()
+                        targets.remove(choose)
+                        if targets==[]:
+                            break
+                elif sample_element.find_element_by_xpath(".//..").get_attribute("class")=="onscore":
+                    choose=random.sample(question_answers,1)[0]
+                    choose.click()
+                elif sample_element.get_attribute("class")=="slider":
+                    from selenium.webdriver import ActionChains
+                    lenth=random.randint(1,100)
+                    slider_element=question_answers[0]
+                    move=ActionChains(driver=driver_)
+                    move.click_and_hold(slider_element).move_by_offset(lenth,0).release().perform()
                 else:
+                    thread_logger.error("寻找得到的元素类型 %s 不属于预料之中的情况" %str(sample_element.get_attribute("type")))
                     raise RuntimeError("无法获取正确的元素，请重试！")
                 thread_logger.info("线程 "+str(thread_id)+" 选择内容：\n问题："+question_title+"\n选择："+choose_answer_title+"\n")
         do_queue(driver_=driver)
@@ -223,7 +330,7 @@ if __name__=="__main__":
             "@echo off\n",
             "%1 mshta vbscript:CreateObject(\"Shell.Application\").ShellExecute(\"cmd.exe\",\"/c %~s0 ::\",\"\",\"runas\",1)(window.close)&&exit\n",
             "cd /d \"%~dp0\"\n",
-            "(echo selenium==3.141.0\necho requests==2.23.0) > requirements.txt\n",
+            "(echo selenium\necho requests\necho lxml) > requirements.txt\n",
             "\""+sys.executable+"\" -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple\n",
             "reg ADD HKLM\SOFTWARE\Policies\Google\Chrome /v RendererCodeIntegrityEnabled /t REG_DWORD /d 0 /f\n",
             "del /F /S /Q requirements.txt\n"]
@@ -267,7 +374,7 @@ if __name__=="__main__":
         import requests
         import hashlib
         import zipfile
-        address=server+"/zhanghua000/wjx-auto-generator-env/raw/master/version.json"
+        address=server+"/zhanghua000/wjx-auto-generator-env/master/version.json"
         try:
             response=requests.get(address)
             version_inf=response.json()
@@ -332,9 +439,9 @@ if __name__=="__main__":
         os.mkdir("Chrome")
     if os.path.exists("Chrome/App/chrome.exe")==False:
         logger.info("正在初始化运行环境。。。")
-        if down_env("https://download.fastgit.org")==1:
+        if down_env(config.git_download)==1:
             raise RuntimeError("下载运行环境出错，请检查网络连接后重试")
-    res=check_update("https://hub.fastgit.org")
+    res=check_update(config.git_raw)
     if res==-1:
         logger.error("下载版本信息失败")
     elif res==0:
@@ -352,7 +459,7 @@ if __name__=="__main__":
     times=int(input("请输入生成的问卷的份数："))
     if times>=config.warn_num:
         logger.warning("当前问卷份数较多，大于 %s 次，较易出现验证。" %config.warn_num)
-    print("问卷星地址举例：https://www.wjx.cn/jq/89714348.aspx")
+    print("问卷星地址举例：https://www.wjx.cn/jq/93192608.aspx")
     url=str(input("请输入问卷星创建的问卷地址："))
     url="https://www.wjx.cn/jq/"+url.split("/")[-1].replace(" ","")
     logger.info("转换地址完成，为："+url)

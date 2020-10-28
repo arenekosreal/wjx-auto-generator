@@ -1,10 +1,14 @@
 from multiprocessing import cpu_count, Process, Queue
 class config:
-    debug=False
-    warn_num=375
-    branch="devel"
-    version=1.2
-    zip_version=1.0
+    # 一些基础信息配置
+    debug=False # 调试模式，打开会显示浏览器界面，日志等级改为 debug 帮助调试
+    warn_num=250 # 过高的问卷数目警告阈值
+    branch="devel" # GitHub分支
+    version=1.2 # 程序版本
+    zip_version=1.0 # 运行环境版本
+    proxy_addr="https://ip.jiangxianli.com/country/%E4%B8%AD%E5%9B%BD?country=%E4%B8%AD%E5%9B%BD" # 代理服务器获取页面
+    git_download="https://download.fastgit.org" # GitHub下载镜像
+    git_raw="https://raw.fastgit.org" #GitHub获取原始文件的镜像
 def process_log(queue):
     import logging
     logger_=logging.getLogger()
@@ -38,9 +42,11 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
     else:
         thread_logger.setLevel(logging.INFO)
     thread_logger.info("开始执行线程 %d 的工作内容" %id_)
-    def do_survey(url_2:str,thread_id:int):
+    def do_survey(url_2:str,thread_id:int,thread_logger=thread_logger):
         import time
         import random
+        import requests
+        from bs4 import BeautifulSoup
         from selenium import webdriver
         from selenium.common.exceptions import NoSuchElementException, WebDriverException, TimeoutException, ElementNotInteractableException
         from selenium.webdriver.support.ui import WebDriverWait
@@ -48,8 +54,41 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
         from selenium.webdriver.support import expected_conditions
         browser=webdriver.ChromeOptions()
         browser.binary_location="./Chrome/App/chrome.exe"
+        proxies=[]
+        try:
+            soup=BeautifulSoup(requests.get(config.proxy_addr).content,"lxml")
+        except:
+            thread_logger.warning("加载代理池信息出错，将使用直连模式")
+            proxies=[""]
+        else:
+            thread_logger.info("加载代理池信息成功！")
+            tbody=soup.find("tbody")
+            trs=tbody.find_all("tr")
+            for tr in trs:
+                tds=tr.find_all("td")
+                proxy_str=str(tds[3].text).lower()+"://"+str(tds[0].text)+":"+str(tds[1].text)
+                proxies.append(proxy_str)
+        del_num=0
+        for proxy_ in proxies:
+            if proxy_!="":
+                try:
+                    re=requests.get(url_2,proxies={"http":proxy_,"https":proxy_})
+                except BaseException:
+                    proxies.remove(proxy_)
+                    del_num=del_num+1
+                else:
+                    if re.status_code!=200:
+                        proxies.remove(proxy_)
+                        del_num=del_num+1
+        if proxies==[]:
+            proxies=[""]
+        thread_logger.debug("已删除 %s 个失效的代理，代理列表：%s" %(del_num,proxies))
+        proxy=random.choice(proxies)
+        thread_logger.debug("使用代理 %s" %proxy)
         if config.debug==False:
-            browser.add_argument("headless")
+            browser.add_argument("--headless")
+        if proxy!="":
+            browser.add_argument("--proxy-server="+proxy)
         try:
             driver = webdriver.Chrome(executable_path="./Chrome/app/chromedriver.exe",options=browser)
         except WebDriverException:
@@ -291,7 +330,7 @@ if __name__=="__main__":
             "@echo off\n",
             "%1 mshta vbscript:CreateObject(\"Shell.Application\").ShellExecute(\"cmd.exe\",\"/c %~s0 ::\",\"\",\"runas\",1)(window.close)&&exit\n",
             "cd /d \"%~dp0\"\n",
-            "(echo selenium==3.141.0\necho requests==2.23.0) > requirements.txt\n",
+            "(echo selenium\necho requests\necho lxml) > requirements.txt\n",
             "\""+sys.executable+"\" -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple\n",
             "reg ADD HKLM\SOFTWARE\Policies\Google\Chrome /v RendererCodeIntegrityEnabled /t REG_DWORD /d 0 /f\n",
             "del /F /S /Q requirements.txt\n"]
@@ -335,7 +374,7 @@ if __name__=="__main__":
         import requests
         import hashlib
         import zipfile
-        address=server+"/zhanghua000/wjx-auto-generator-env/raw/master/version.json"
+        address=server+"/zhanghua000/wjx-auto-generator-env/master/version.json"
         try:
             response=requests.get(address)
             version_inf=response.json()
@@ -400,9 +439,9 @@ if __name__=="__main__":
         os.mkdir("Chrome")
     if os.path.exists("Chrome/App/chrome.exe")==False:
         logger.info("正在初始化运行环境。。。")
-        if down_env("https://download.fastgit.org")==1:
+        if down_env(config.git_download)==1:
             raise RuntimeError("下载运行环境出错，请检查网络连接后重试")
-    res=check_update("https://hub.fastgit.org")
+    res=check_update(config.git_raw)
     if res==-1:
         logger.error("下载版本信息失败")
     elif res==0:
@@ -420,7 +459,7 @@ if __name__=="__main__":
     times=int(input("请输入生成的问卷的份数："))
     if times>=config.warn_num:
         logger.warning("当前问卷份数较多，大于 %s 次，较易出现验证。" %config.warn_num)
-    print("问卷星地址举例：https://www.wjx.cn/jq/89714348.aspx")
+    print("问卷星地址举例：https://www.wjx.cn/jq/93192608.aspx")
     url=str(input("请输入问卷星创建的问卷地址："))
     url="https://www.wjx.cn/jq/"+url.split("/")[-1].replace(" ","")
     logger.info("转换地址完成，为："+url)

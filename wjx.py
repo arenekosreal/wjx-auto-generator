@@ -3,7 +3,7 @@ class config:
     # 一些基础信息配置
     debug=False # 调试模式，打开会显示浏览器界面，日志等级改为 debug 帮助调试
     warn_num=250 # 过高的问卷数目警告阈值
-    branch="devel" # GitHub分支
+    branch="master" # GitHub分支
     version=1.2 # 程序版本
     zip_version=1.0 # 运行环境版本
     proxy_addr="https://ip.jiangxianli.com/country/%E4%B8%AD%E5%9B%BD?country=%E4%B8%AD%E5%9B%BD" # 代理服务器获取页面

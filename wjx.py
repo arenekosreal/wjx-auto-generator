@@ -5,7 +5,7 @@ class config:
     # 一些基础信息配置
     debug=True # 调试模式，打开会显示浏览器界面，日志等级改为 debug 帮助调试
     warn_num=250 # 过高的问卷数目警告阈值
-    branch="debug" # GitHub分支
+    branch="devel" # GitHub分支
     version=1.3 # 程序版本
     zip_version=1.0 # 运行环境版本
     proxy_addr="https://api.getproxylist.com/proxy?country[]=CN" # 代理服务器获取API

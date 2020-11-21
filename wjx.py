@@ -1,14 +1,18 @@
 from multiprocessing import cpu_count, Process, Queue
+from socket import timeout
+from typing import Protocol
 class config:
     # 一些基础信息配置
-    debug=False # 调试模式，打开会显示浏览器界面，日志等级改为 debug 帮助调试
+    debug=True # 调试模式，打开会显示浏览器界面，日志等级改为 debug 帮助调试
     warn_num=250 # 过高的问卷数目警告阈值
-    branch="master" # GitHub分支
-    version=1.2 # 程序版本
+    branch="debug" # GitHub分支
+    version=1.3 # 程序版本
     zip_version=1.0 # 运行环境版本
-    proxy_addr="https://ip.jiangxianli.com/country/%E4%B8%AD%E5%9B%BD?country=%E4%B8%AD%E5%9B%BD" # 代理服务器获取页面
+    proxy_addr="https://api.getproxylist.com/proxy?country[]=CN" # 代理服务器获取API
     git_download="https://download.fastgit.org" # GitHub下载镜像
     git_raw="https://raw.fastgit.org" #GitHub获取原始文件的镜像
+    enable_proxy=True # 是否启用代理
+    proxy_num=5 # 代理获取的数量
 def process_log(queue):
     import logging
     logger_=logging.getLogger()
@@ -27,7 +31,7 @@ def process_log(queue):
             break
         logger=logging.getLogger(record.name)
         logger.handle(record)
-def multicoreproc(id_:int,url_:str,times:int,queue):
+def multicoreproc(id_:int,url_:str,times:int,queue,proxies=[]):
     import logging
     import random
     import time
@@ -42,11 +46,9 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
     else:
         thread_logger.setLevel(logging.INFO)
     thread_logger.info("开始执行线程 %d 的工作内容" %id_)
-    def do_survey(url_2:str,thread_id:int,thread_logger=thread_logger):
+    def do_survey(url_2:str,thread_id:int,thread_logger=thread_logger,proxies=proxies):
         import time
         import random
-        import requests
-        from bs4 import BeautifulSoup
         from selenium import webdriver
         from selenium.common.exceptions import NoSuchElementException, WebDriverException, TimeoutException, ElementNotInteractableException
         from selenium.webdriver.support.ui import WebDriverWait
@@ -54,39 +56,13 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
         from selenium.webdriver.support import expected_conditions
         browser=webdriver.ChromeOptions()
         browser.binary_location="./Chrome/App/chrome.exe"
-        proxies=[]
-        try:
-            soup=BeautifulSoup(requests.get(config.proxy_addr).content,"lxml")
-        except:
-            thread_logger.warning("加载代理池信息出错，将使用直连模式")
-            proxies=[""]
-        else:
-            thread_logger.info("加载代理池信息成功！")
-            tbody=soup.find("tbody")
-            trs=tbody.find_all("tr")
-            for tr in trs:
-                tds=tr.find_all("td")
-                proxy_str=str(tds[3].text).lower()+"://"+str(tds[0].text)+":"+str(tds[1].text)
-                proxies.append(proxy_str)
-        del_num=0
-        for proxy_ in proxies:
-            if proxy_!="":
-                try:
-                    re=requests.get(url_2,proxies={"http":proxy_,"https":proxy_})
-                except BaseException:
-                    proxies.remove(proxy_)
-                    del_num=del_num+1
-                else:
-                    if re.status_code!=200:
-                        proxies.remove(proxy_)
-                        del_num=del_num+1
-        if proxies==[]:
-            proxies=[""]
-        thread_logger.debug("已删除 %s 个失效的代理，代理列表：%s" %(del_num,proxies))
-        proxy=random.choice(proxies)
-        thread_logger.debug("使用代理 %s" %proxy)
         if config.debug==False:
             browser.add_argument("--headless")
+        if proxies==[]:
+            proxies=[""]
+        thread_logger.debug("代理列表：%s" %proxies)
+        proxy=random.choice(proxies)
+        thread_logger.debug("使用代理 %s" %proxy)
         if proxy!="":
             browser.add_argument("--proxy-server="+proxy)
         try:
@@ -104,6 +80,8 @@ def multicoreproc(id_:int,url_:str,times:int,queue):
         except TimeoutException:
             thread_logger.error("线程 %d 连接网络超时，请检查网络连接后重试" %thread_id)
             return False
+        else:
+            thread_logger.debug("加载网页完成")
         def do_queue(driver_=driver):
             question_elements=driver_.find_elements_by_xpath('//div[@class="div_question"]')
             choose_answer_title=""
@@ -330,7 +308,7 @@ if __name__=="__main__":
             "@echo off\n",
             "%1 mshta vbscript:CreateObject(\"Shell.Application\").ShellExecute(\"cmd.exe\",\"/c %~s0 ::\",\"\",\"runas\",1)(window.close)&&exit\n",
             "cd /d \"%~dp0\"\n",
-            "(echo selenium\necho requests\necho lxml) > requirements.txt\n",
+            "(echo selenium\necho requests\necho lxml\necho requests\[socks\]) > requirements.txt\n",
             "\""+sys.executable+"\" -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple\n",
             "reg ADD HKLM\SOFTWARE\Policies\Google\Chrome /v RendererCodeIntegrityEnabled /t REG_DWORD /d 0 /f\n",
             "del /F /S /Q requirements.txt\n"]
@@ -416,6 +394,44 @@ if __name__=="__main__":
             logger.info("未发现运行环境更新")
             return 3
         return 0
+    def get_proxies(num=3,testurl="https://www.wjx.cn/jq/93192608.aspx"):
+        import time
+        import requests
+        proxies=[]
+        if config.enable_proxy==False:
+            logger.info("未打开代理模式，使用直连模式")
+            return []
+        else:
+            logger.info("已打开代理模式，正在获取代理")
+            for i in range(num):
+                time.sleep(3)
+                try:
+                    re=requests.get(config.proxy_addr)
+                except:
+                    logger.error("与API通信出错，放弃使用代理，使用直连模式")
+                else:
+                    proxy_json=re.json()
+                    try:
+                        error=proxy_json["error"]
+                    except KeyError:
+                        logger.info("获取代理信息成功")
+                    else:
+                        logger.warning("获取代理失败，API返回错误信息： %s" %error)
+                        return []
+                    proxy_str=str(proxy_json["protocol"])+"://"+str(proxy_json["ip"])+":"+str(proxy_json["port"])
+                    logger.debug("开始测试代理 %s" %proxy_str)
+                    try:
+                        headers={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.103 Safari/537.36"}
+                        test=requests.get(testurl,proxies={"http":proxy_str,"https":proxy_str},headers=headers)
+                    except:
+                        logger.debug("代理测试失败，通过这个代理无法与服务器通信")
+                    else:
+                        if test.status_code==200:
+                            logger.debug("代理测试通过")
+                            proxies.append(proxy_str)
+                        else:
+                            logger.debug("代理测试失败，服务器返回值非200")
+        return proxies
     try:
         import requests
         from selenium import webdriver
@@ -456,13 +472,19 @@ if __name__=="__main__":
         logger.error("检查更新过程出现错误")
     else:
         raise ValueError("意料之外的返回值")
-    times=int(input("请输入生成的问卷的份数："))
+    if config.debug==False:
+        times=int(input("请输入生成的问卷的份数："))
+        print("问卷星地址举例：https://www.wjx.cn/jq/93192608.aspx")
+        url=str(input("请输入问卷星创建的问卷地址："))
+    else:
+        times=1
+        url="https://www.wjx.cn/jq/93192608.aspx"
+        logger.debug("处于调试模式，问卷回答份数强制为1,地址为测试问卷地址 https://www.wjx.cn/jq/93192608.aspx")
     if times>=config.warn_num:
         logger.warning("当前问卷份数较多，大于 %s 次，较易出现验证。" %config.warn_num)
-    print("问卷星地址举例：https://www.wjx.cn/jq/93192608.aspx")
-    url=str(input("请输入问卷星创建的问卷地址："))
     url="https://www.wjx.cn/jq/"+url.split("/")[-1].replace(" ","")
     logger.info("转换地址完成，为："+url)
+    proxies=get_proxies(num=5,testurl=url)
     start_time=time.time()
     threads=[]
     thread_num=int(cpu_count()/2)
@@ -470,12 +492,12 @@ if __name__=="__main__":
     logger_process=Process(target=process_log,args=(queue,))
     logger_process.start()
     if more_times_!=0:
-        more_thread=Process(target=multicoreproc,args=(thread_num+1,url,more_times_,queue))
+        more_thread=Process(target=multicoreproc,args=(thread_num+1,url,more_times_,queue,proxies))
         more_thread.start()
         threads.append(more_thread)
     if times_!=0:
         for thread_id in range(thread_num):
-            thread=Process(target=multicoreproc,args=(thread_id,url,times_,queue))
+            thread=Process(target=multicoreproc,args=(thread_id,url,times_,queue,proxies))
             thread.start()
             threads.append(thread)
     if len(threads)!=0:

@@ -8,11 +8,12 @@ class config:
     branch="devel" # GitHub分支
     version=1.3 # 程序版本
     zip_version=1.0 # 运行环境版本
-    proxy_addr="https://api.getproxylist.com/proxy?country[]=CN" # 代理服务器获取API
+    proxy_addr="https://api.getproxylist.com/proxy?country[]=CN&protocol[]=http&protocol[]=socks4&protocol[]=socks5&allowsUserAgentHeader=1" # 代理服务器获取API
     git_download="https://download.fastgit.org" # GitHub下载镜像
     git_raw="https://raw.fastgit.org" #GitHub获取原始文件的镜像
     enable_proxy=True # 是否启用代理
     proxy_num=5 # 代理获取的数量
+    timeout_=10 # 测试代理的超时
 def process_log(queue):
     import logging
     logger_=logging.getLogger()
@@ -60,11 +61,13 @@ def multicoreproc(id_:int,url_:str,times:int,queue,proxies=[]):
             browser.add_argument("--headless")
         if proxies==[]:
             proxies=[""]
-        thread_logger.debug("代理列表：%s" %proxies)
+        thread_logger.debug("获得的代理列表：%s" %proxies)
         proxy=random.choice(proxies)
-        thread_logger.debug("使用代理 %s" %proxy)
         if proxy!="":
             browser.add_argument("--proxy-server="+proxy)
+            thread_logger.debug("使用代理 %s" %proxy)
+        else:
+            thread_logger.debug("使用直连模式")
         try:
             driver = webdriver.Chrome(executable_path="./Chrome/app/chromedriver.exe",options=browser)
         except WebDriverException:
@@ -397,40 +400,103 @@ if __name__=="__main__":
     def get_proxies(num=3,testurl="https://www.wjx.cn/jq/93192608.aspx"):
         import time
         import requests
+        import os
         proxies=[]
-        if config.enable_proxy==False:
-            logger.info("未打开代理模式，使用直连模式")
-            return []
-        else:
-            logger.info("已打开代理模式，正在获取代理")
-            for i in range(num):
-                time.sleep(3)
-                try:
-                    re=requests.get(config.proxy_addr)
-                except:
-                    logger.error("与API通信出错，放弃使用代理，使用直连模式")
-                else:
-                    proxy_json=re.json()
+        work_num=0
+        failed_num=0
+        headers={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.103 Safari/537.36"}
+        if os.path.exists("proxy.txt")==True:
+            logger.debug("发现代理数据库，正在加载")
+            try:
+                with open(file="proxy.txt",mode="r",encoding="utf-8") as proxy_reader:
+                    proxies_orig=proxy_reader.readlines()
+            except:
+                logger.debug("加载代理数据库文件失败")
+            else:
+                logger.debug("加载代理数据库成功，正在测试代理")
+                for proxy_orig in proxies_orig:
+                    if proxy_orig=="\n":
+                        proxies_orig.remove(proxy_orig)
+                for proxy_orig in proxies_orig:
+                        if proxy_orig.endswith("\n"):
+                            proxies.append(proxy_orig.replace("\n",""))
+                        else:
+                            proxies.append(proxy_orig)
+                if proxies==[]:
+                    logger.debug("数据库为空，返回空的代理列表")
+                    return proxies
+                for proxy in proxies:
                     try:
-                        error=proxy_json["error"]
-                    except KeyError:
-                        logger.info("获取代理信息成功")
-                    else:
-                        logger.warning("获取代理失败，API返回错误信息： %s" %error)
-                        return []
-                    proxy_str=str(proxy_json["protocol"])+"://"+str(proxy_json["ip"])+":"+str(proxy_json["port"])
-                    logger.debug("开始测试代理 %s" %proxy_str)
-                    try:
-                        headers={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.103 Safari/537.36"}
-                        test=requests.get(testurl,proxies={"http":proxy_str,"https":proxy_str},headers=headers)
+                        test=requests.get(testurl,proxies={"http":proxy,"https":proxy},headers=headers,timeout=config.timeout_)
                     except:
-                        logger.debug("代理测试失败，通过这个代理无法与服务器通信")
+                        logger.debug("代理 %s 测试失败:通过这个代理无法创建连接" %proxy)
+                        proxies.remove(proxy)
                     else:
                         if test.status_code==200:
-                            logger.debug("代理测试通过")
-                            proxies.append(proxy_str)
+                            logger.debug("代理 %s 测试成功" %proxy)
                         else:
-                            logger.debug("代理测试失败，服务器返回值非200")
+                            logger.debug("代理 %s 测试失败:服务器返回值错误" %proxy)
+                            proxies.remove(proxy)
+        else:
+            logger.debug("不存在代理数据库，将从API获取代理")
+        if config.enable_proxy==False:
+            logger.info("未打开代理模式，使用直连模式")
+            return proxies
+        else:
+            logger.info("已打开代理模式，正在获取代理")
+            work_num=len(proxies)
+            if work_num>=num:
+                logger.debug("数据库中的有效代理足够，跳过从API获取")
+                return proxies
+            else:
+                logger.debug("数据库中代理不足，正在通过API补齐代理")
+                num=num-work_num
+                for i in range(num):
+                    time.sleep(3)
+                    try:
+                        re=requests.get(config.proxy_addr)
+                    except:
+                        logger.error("与API通信出错，放弃从网络获取代理")
+                        return proxies
+                    else:
+                        proxy_json=re.json()
+                        try:
+                            error=proxy_json["error"]
+                        except KeyError:
+                            logger.info("获取代理信息成功")
+                        else:
+                            logger.warning("获取代理失败，API返回错误信息： %s" %error)
+                            return proxies
+                        proxy_str=str(proxy_json["protocol"])+"://"+str(proxy_json["ip"])+":"+str(proxy_json["port"])
+                        logger.debug("开始测试代理 %s" %proxy_str)
+                        try:
+                            test=requests.get(url=testurl,proxies={"http":proxy_str,"https":proxy_str},headers=headers,timeout=config.timeout_)
+                        except:
+                            logger.debug("代理测试失败，通过这个代理无法与服务器通信")
+                            failed_num=failed_num+1
+                        else:
+                            if test.status_code==200:
+                                logger.debug("代理测试通过")
+                                proxies.append(proxy_str)
+                            else:
+                                logger.debug("代理测试失败，服务器返回值非200")
+                                failed_num=failed_num+1
+                if failed_num>0:
+                    logger.debug("无效代理数为 %d 将再次获取代理补充数据库" %failed_num)
+                    proxies=proxies+get_proxies(num=failed_num,testurl=testurl)
+                if proxies!=[]:
+                    proxy_mod=[]
+                    for proxy in proxies:
+                        if proxy=="\n":
+                            proxies.remove(proxy)
+                    for proxy in proxies:
+                        if proxy.endswith("\n")==False:
+                            proxy_mod.append(proxy+"\n")
+                        else:
+                            proxy_mod.append(proxy)
+                    with open(file="proxy.txt",mode="w",encoding="utf-8") as proxy_writer:
+                        proxy_writer.writelines(proxy_mod)
+                        logger.debug("已将有效代理加入记录")
         return proxies
     try:
         import requests
